@@ -1,0 +1,252 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/joho/godotenv"
+)
+
+type Config struct {
+	// Server
+	Port    string
+	SSHPort string
+	AppURL  string
+
+	// Database
+	DatabaseURL string
+	RedisURL    string
+
+	// JWT
+	JWTSecret string
+
+	// Git identity defaults for tag/commit operations when runtime git config is missing.
+	GitIdentityName  string
+	GitIdentityEmail string
+
+	// Admin dashboard password for /admin/system endpoint.
+	AdminSystemPassword string
+
+	// Storage
+	ReposPath          string
+	SSHHostKeyPath     string
+	AvatarsPath        string
+	PackagesPath       string
+	MarkdownAssetsPath string
+
+	// Secrets encryption
+	SecretEncryptionKey string
+
+	// Database connection pool
+	DBMaxOpenConns           int
+	DBMaxIdleConns           int
+	DBConnMaxLifetimeMinutes int
+
+	// CORS — comma-separated list of allowed origins
+	CORSOrigins []string
+
+	// Workflow runner
+	DockerHost                       string
+	WorkflowRunnerImage              string
+	WorkflowMaxRunsPerMonth          int
+	WorkflowMaxConcurrentRuns        int
+	WorkflowContainerMemory          string
+	WorkflowContainerCPUs            string
+	WorkflowContainerNetworkMode     string
+	WorkflowWorkspacePath            string
+	WorkflowAllowDockerSocket        bool
+	WorkflowContainerPidsLimit       int
+	WorkflowContainerReadOnlyRootfs  bool
+	WorkflowContainerNoNewPrivileges bool
+	WorkflowContainerDropAllCaps     bool
+
+	// Security: Cloudflare Turnstile
+	TurnstileSecretKey string
+	TurnstileSiteKey   string
+	EnableTurnstile    bool
+
+	// Security: Anti-spam
+	EnableDisposableCheck bool
+	EnableRateLimiting    bool
+
+	// Repository creation policy
+	RestrictRepoCreation   bool
+	RepoCreationAllowUsers []string
+	SelfHostURL            string
+
+	// Email: Maileroo API delivery
+	MailerooAPIKey   string
+	MailerooBaseURL  string
+	MailerooFrom     string
+	MailerooFromName string
+}
+
+func Load() (*Config, error) {
+	// Load .env file if it exists
+	_ = godotenv.Load()
+
+	cfg := &Config{
+		Port:                getEnv("PORT", "8080"),
+		SSHPort:             getEnv("SSH_PORT", "2222"),
+		AppURL:              getEnv("APP_URL", "http://localhost:8080"),
+		DatabaseURL:         getEnv("DATABASE_URL", ""),
+		RedisURL:            getEnvOrEmpty("REDIS_URL", ""),
+		JWTSecret:           getEnv("JWT_SECRET", ""),
+		GitIdentityName:     getEnv("GIT_IDENTITY_NAME", "GitPier"),
+		GitIdentityEmail:    getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
+		AdminSystemPassword: getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
+		ReposPath:           getEnv("REPOS_PATH", "../.data/repos"),
+		SSHHostKeyPath:      getEnv("SSH_HOST_KEY_PATH", "../.data/ssh_host_key"),
+		AvatarsPath:         getEnv("AVATARS_PATH", "../.data/avatars"),
+		PackagesPath:        getEnv("PACKAGES_PATH", "../.data/packages"),
+		MarkdownAssetsPath:  getEnv("MARKDOWN_ASSETS_PATH", "../.data/markdown-assets"),
+
+		// Derive the encryption key from a dedicated env var; fall back to JWT_SECRET so
+		// existing deployments keep working without extra configuration.
+		SecretEncryptionKey: getEnv("SECRET_ENCRYPTION_KEY", getEnv("JWT_SECRET", "")),
+
+		DBMaxOpenConns:           getEnvInt("DB_MAX_OPEN_CONNS", 25),
+		DBMaxIdleConns:           getEnvInt("DB_MAX_IDLE_CONNS", 10),
+		DBConnMaxLifetimeMinutes: getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
+		CORSOrigins:              parseCORSOrigins(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")),
+
+		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://docker:2375"),
+		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier-runner:latest"),
+		WorkflowMaxRunsPerMonth:          getEnvInt("WORKFLOW_MAX_RUNS_PER_MONTH", 50),
+		WorkflowMaxConcurrentRuns:        getEnvInt("WORKFLOW_MAX_CONCURRENT_RUNS", 3),
+		WorkflowContainerMemory:          getEnv("WORKFLOW_CONTAINER_MEMORY", "500m"),
+		WorkflowContainerCPUs:            getEnv("WORKFLOW_CONTAINER_CPUS", "0.5"),
+		WorkflowContainerNetworkMode:     normalizeWorkflowContainerNetworkMode(getEnvOrEmpty("WORKFLOW_CONTAINER_NETWORK_MODE", "bridge")),
+		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", "../.data/workflow-workspaces"),
+		WorkflowAllowDockerSocket:        getEnvOrEmpty("WORKFLOW_ALLOW_DOCKER_SOCKET", "false") == "true",
+		WorkflowContainerPidsLimit:       getEnvInt("WORKFLOW_CONTAINER_PIDS_LIMIT", 256),
+		WorkflowContainerReadOnlyRootfs:  getEnvOrEmpty("WORKFLOW_CONTAINER_READONLY_ROOTFS", "true") == "true",
+		WorkflowContainerNoNewPrivileges: getEnvOrEmpty("WORKFLOW_CONTAINER_NO_NEW_PRIVILEGES", "true") == "true",
+		WorkflowContainerDropAllCaps:     getEnvOrEmpty("WORKFLOW_CONTAINER_DROP_ALL_CAPS", "true") == "true",
+
+		TurnstileSecretKey: getEnvOrEmpty("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA"), // Disabled by default
+		TurnstileSiteKey:   getEnvOrEmpty("TURNSTILE_SITE_KEY", "1x00000000000000000000AA"),              // Disabled by default
+		EnableTurnstile:    getEnvOrEmpty("ENABLE_TURNSTILE", "false") == "true",
+
+		EnableDisposableCheck: getEnvOrEmpty("ENABLE_DISPOSABLE_EMAIL_CHECK", "true") == "true",
+		EnableRateLimiting:    getEnvOrEmpty("ENABLE_RATE_LIMITING", "true") == "true",
+
+		RestrictRepoCreation: getEnvOrEmpty("RESTRICT_REPO_CREATION", "false") == "true",
+		RepoCreationAllowUsers: parseNormalizedUsernames(
+			getEnvOrEmpty("REPO_CREATION_ALLOWED_USERS", ""),
+		),
+		SelfHostURL: getEnvOrEmpty("SELF_HOST_URL", "https://github.com/gitpier/gitpier"),
+
+		MailerooAPIKey:   getEnvOrEmpty("MAILEROO_API_KEY", ""),
+		MailerooBaseURL:  getEnvOrEmpty("MAILEROO_BASE_URL", "https://smtp.maileroo.com/api/v2"),
+		MailerooFrom:     getEnvOrEmpty("MAILEROO_FROM", "noreply@gitpier.com"),
+		MailerooFromName: getEnvOrEmpty("MAILEROO_FROM_NAME", "GitPier"),
+	}
+
+	// Resolve relative paths to absolute so they work regardless of working directory.
+	if p, err := filepath.Abs(cfg.ReposPath); err == nil {
+		cfg.ReposPath = p
+	}
+	if p, err := filepath.Abs(cfg.AvatarsPath); err == nil {
+		cfg.AvatarsPath = p
+	}
+	if p, err := filepath.Abs(cfg.SSHHostKeyPath); err == nil {
+		cfg.SSHHostKeyPath = p
+	}
+	if p, err := filepath.Abs(cfg.WorkflowWorkspacePath); err == nil {
+		cfg.WorkflowWorkspacePath = p
+	}
+	if p, err := filepath.Abs(cfg.MarkdownAssetsPath); err == nil {
+		cfg.MarkdownAssetsPath = p
+	}
+
+	if cfg.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	if cfg.JWTSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+
+	return cfg, nil
+}
+
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		sanitized := sanitizeEnvValue(val)
+		if sanitized != "" {
+			return sanitized
+		}
+	}
+	return defaultVal
+}
+
+// getEnvOrEmpty returns the env value if set (even if empty), otherwise defaultVal.
+// Use this for keys where an explicit empty value means "disabled".
+func getEnvOrEmpty(key, defaultVal string) string {
+	if val, ok := os.LookupEnv(key); ok {
+		return sanitizeEnvValue(val)
+	}
+	return defaultVal
+}
+
+// sanitizeEnvValue trims whitespace and treats comment-only values as empty.
+// This supports patterns like `KEY= # disabled` in .env files.
+func sanitizeEnvValue(val string) string {
+	trimmed := strings.TrimSpace(val)
+	if strings.HasPrefix(trimmed, "#") {
+		return ""
+	}
+	return trimmed
+}
+
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+func parseCORSOrigins(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func normalizeWorkflowContainerNetworkMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "none":
+		return "none"
+	case "bridge":
+		return "bridge"
+	default:
+		return "bridge"
+	}
+}
+
+func parseNormalizedUsernames(s string) []string {
+	parts := strings.Split(s, ",")
+	seen := make(map[string]struct{}, len(parts))
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		username := strings.ToLower(strings.TrimSpace(part))
+		if username == "" {
+			continue
+		}
+		if _, exists := seen[username]; exists {
+			continue
+		}
+		seen[username] = struct{}{}
+		out = append(out, username)
+	}
+	return out
+}

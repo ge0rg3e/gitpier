@@ -1,0 +1,115 @@
+name: gitpier
+services:
+  dind:
+    image: docker:29-dind
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command:
+      - --host=unix:///var/run/docker.sock
+      - --host=tcp://0.0.0.0:2375
+    volumes:
+      - dind_data:/var/lib/docker
+      - dind_run:/var/run
+      - backend_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitpier
+      POSTGRES_PASSWORD: # {PASS}
+      POSTGRES_DB: gitpier
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: gitpier/backend:0.0.1
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      dind:
+        condition: service_started
+    environment:
+      PORT: "8080"
+      SSH_PORT: "2222"
+      APP_URL: https://alpha-api.gitpier.com
+      CORS_ORIGINS: https://alpha.gitpier.com
+      DATABASE_URL: postgres://gitpier:{PASS}@postgres:5432/gitpier
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: # {SECRET}
+      SECRET_ENCRYPTION_KEY: # {SECRET}
+      GIT_IDENTITY_NAME: GitPier
+      GIT_IDENTITY_EMAIL: noreply@gitpier.local
+      MAILEROO_API_KEY: # {SECRET}
+      SYSTEM_ADMIN_PASSWORD: # {SECRET}
+      RESTRICT_REPO_CREATION: "true"
+      REPO_CREATION_ALLOWED_USERS: "ge0rg3e"
+      SELF_HOST_URL: https://github.com/gitpier/gitpier
+      REPOS_PATH: /data/repos
+      AVATARS_PATH: /data/avatars
+      PACKAGES_PATH: /data/packages
+      MARKDOWN_ASSETS_PATH: /data/markdown-assets
+      SSH_HOST_KEY_PATH: /data/ssh/ssh_host_key
+      WORKFLOW_WORKSPACE_PATH: /data/workflow-workspaces
+      DOCKER_HOST: "tcp://dind:2375"
+      WORKFLOW_ALLOW_DOCKER_SOCKET: "true"
+      WORKFLOW_CONTAINER_PIDS_LIMIT: "256"
+      WORKFLOW_CONTAINER_READONLY_ROOTFS: "true"
+      WORKFLOW_CONTAINER_NO_NEW_PRIVILEGES: "true"
+      WORKFLOW_CONTAINER_DROP_ALL_CAPS: "true"
+      WORKFLOW_CONTAINER_NETWORK_MODE: "bridge"
+      WORKFLOW_RUNNER_IMAGE: "gitpier/action-runner:0.0.1"
+      WORKFLOW_MAX_RUNS_PER_MONTH: "50"
+      WORKFLOW_MAX_CONCURRENT_RUNS: "3"
+      WORKFLOW_CONTAINER_MEMORY: "500m"
+      WORKFLOW_CONTAINER_CPUS: "0.5"
+    group_add:
+      - 983
+    ports:
+      - "8080:8080"
+      - "2223:2222"
+    volumes:
+      - backend_data:/data
+      - dind_run:/var/run
+
+  frontend:
+    image: gitpier/frontend:0.0.1
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      PUBLIC_API_URL: https://alpha-api.gitpier.com
+      PUBLIC_SSH_CLONE_HOST: git.gitpier.com:2222
+      PUBLIC_TURNSTILE_SITE_KEY: # {SECRET}
+      HOST: 0.0.0.0
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  dind_data:
+  dind_run:
+  backend_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data

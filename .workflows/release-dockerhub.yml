@@ -1,0 +1,60 @@
+name: Release Docker Images
+
+on:
+  release:
+    types:
+      - created
+
+jobs:
+  docker-release:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Validate release version and Docker Hub credentials
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME:-}"
+          if [ -z "$VERSION" ]; then
+            echo "GITHUB_REF_NAME is empty; cannot determine release tag version."
+            exit 1
+          fi
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION#V}"
+          if [ -z "$VERSION" ]; then
+            echo "Release tag must contain a version after optional v/V prefix."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "Missing DOCKERHUB_USERNAME or DOCKERHUB_TOKEN repository secret."
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
+        run: |
+          set -eu
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Build and push backend image
+        run: |
+          set -eu
+          IMAGE="gitpier/backend:${VERSION}"
+          docker build -f backend/Dockerfile -t "$IMAGE" backend
+          docker push "$IMAGE"
+
+      - name: Build and push frontend image
+        run: |
+          set -eu
+          IMAGE="gitpier/frontend:${VERSION}"
+          docker build -f frontend/Dockerfile -t "$IMAGE" frontend
+          docker push "$IMAGE"
+
+      - name: Build and push action-runner image
+        run: |
+          set -eu
+          IMAGE="gitpier/action-runner:${VERSION}"
+          docker build -f action-runner/Dockerfile -t "$IMAGE" action-runner
+          docker push "$IMAGE"
