@@ -81,8 +81,7 @@
 
 		profileIsOrg = null;
 		let cancelled = false;
-		orgs
-			.get(handle)
+		orgs.get(handle)
 			.then(() => {
 				if (cancelled) return;
 				orgProfileCache.set(handle, true);
@@ -179,7 +178,7 @@
 		const third = parts[2];
 		const ref = query.get('ref')?.trim() ?? '';
 
-		const isSystem = ['auth', 'legal', 'settings', 'search', 'new', 'orgs', 'apps', 'login'].includes(parts[0] ?? '');
+		const isSystem = ['auth', 'settings', 'search', 'new', 'orgs', 'apps', 'login'].includes(parts[0] ?? '');
 		const isUserSection = ['repos', 'starred', 'packages', 'people', 'settings', 'projects'].includes(second ?? '');
 
 		let title = 'Page';
@@ -845,12 +844,7 @@
 				<button type="button" class="electron-window-button" aria-label="Minimize window" onclick={minimizeElectronWindow}>
 					<Minus class="h-3.5 w-3.5" />
 				</button>
-				<button
-					type="button"
-					class="electron-window-button"
-					aria-label={isElectronWindowMaximized ? 'Restore window' : 'Maximize window'}
-					onclick={toggleElectronWindowMaximize}
-				>
+				<button type="button" class="electron-window-button" aria-label={isElectronWindowMaximized ? 'Restore window' : 'Maximize window'} onclick={toggleElectronWindowMaximize}>
 					{#if isElectronWindowMaximized}
 						<span class="electron-restore-icon" aria-hidden="true"></span>
 					{:else}

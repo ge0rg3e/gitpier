@@ -36,8 +36,6 @@
 	let loading = $state(false);
 	let error = $state('');
 	let info = $state('');
-	let gdprConsent = $state(false);
-	let ageConfirmed = $state(false);
 	let turnstileToken = $state('');
 	let registrationToken = $state('');
 	let otpCode = $state('');
@@ -75,7 +73,11 @@
 	}
 
 	const usernameValid = $derived(username.length >= 1 && username.length <= 39 && /^[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]?$/.test(username));
+	const emailValid = $derived(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()));
+	const passwordValid = $derived(password.length >= 8);
 	const otpCodeValid = $derived(/^[0-9]{6}$/.test(otpCode.trim()));
+	const canRequestOtp = $derived(usernameValid && emailValid && passwordValid && (!turnstileSiteKey || !!turnstileToken));
+	const canVerifyOtp = $derived(otpCodeValid);
 
 	function normalizeOtp(value: string) {
 		return value.replace(/\D/g, '').slice(0, 6);
@@ -111,16 +113,12 @@
 			error = 'Username can only contain alphanumeric characters and hyphens.';
 			return;
 		}
-		if (password.length < 8) {
+		if (!emailValid) {
+			error = 'Please enter a valid email address.';
+			return;
+		}
+		if (!passwordValid) {
 			error = 'Password must be at least 8 characters.';
-			return;
-		}
-		if (!gdprConsent) {
-			error = 'You must accept the Privacy Policy and Terms of Service to register.';
-			return;
-		}
-		if (!ageConfirmed) {
-			error = 'You must confirm that you are at least 13 years old.';
 			return;
 		}
 		if (turnstileSiteKey && !turnstileToken) {
@@ -131,7 +129,7 @@
 		error = '';
 		info = '';
 		try {
-			const result = await auth.requestRegisterOTP(username, email, password, true, turnstileToken);
+			const result = await auth.requestRegisterOTP(username.trim(), email.trim(), password, true, turnstileToken);
 			registrationToken = result.registration_token;
 			otpRequested = true;
 			otpCode = '';
@@ -158,6 +156,11 @@
 
 		loading = true;
 		if (!otpRequested) {
+			if (!canRequestOtp) {
+				error = 'Please fill in all required fields correctly.';
+				loading = false;
+				return;
+			}
 			await requestOTP();
 			loading = false;
 			return;
@@ -168,7 +171,7 @@
 			loading = false;
 			return;
 		}
-		if (!otpCodeValid) {
+		if (!canVerifyOtp) {
 			error = 'Please enter a valid 6-digit OTP code.';
 			loading = false;
 			return;
@@ -305,38 +308,6 @@
 						<p class="mt-1 text-xs text-muted-foreground">At least 8 characters.</p>
 					</div>
 
-					<div class="flex items-start gap-2.5">
-						<input
-							id="gdpr_consent"
-							type="checkbox"
-							bind:checked={gdprConsent}
-							required
-							disabled={otpRequested}
-							class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border border-border bg-background accent-primary"
-						/>
-						<label for="gdpr_consent" class="cursor-pointer text-xs leading-relaxed text-muted-foreground">
-							I have read and agree to the <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2 hover:text-primary/80"
-								>Privacy Policy</a
-							>
-							and <a href="/legal/terms" target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2 hover:text-primary/80">Terms of Service</a>.
-						</label>
-					</div>
-
-					<div class="flex items-start gap-2.5">
-						<input
-							id="age_confirm"
-							type="checkbox"
-							bind:checked={ageConfirmed}
-							required
-							disabled={otpRequested}
-							class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border border-border bg-background accent-primary"
-						/>
-						<label for="age_confirm" class="cursor-pointer text-xs leading-relaxed text-muted-foreground">
-							I confirm that I am at least <strong class="text-foreground">13 years old</strong>
-							(16 years old if I am in the EU or UK).
-						</label>
-					</div>
-
 					{#if turnstileSiteKey && !otpRequested}
 						<div class="flex justify-center py-1">
 							<div bind:this={turnstileContainerRef} class="cf-turnstile" data-sitekey={turnstileSiteKey}></div>
@@ -361,7 +332,12 @@
 						</div>
 					{/if}
 
-					<Button variant="brand" type="submit" class="mt-1 h-10 w-full rounded-xl" disabled={loading || (!otpRequested && (!gdprConsent || !ageConfirmed))}>
+					<Button
+						variant="brand"
+						type="submit"
+						class="mt-1 h-10 w-full rounded-xl"
+						disabled={loading || (otpRequested ? !canVerifyOtp : !canRequestOtp)}
+					>
 						{#if loading}<Loader class="h-4 w-4 animate-spin" />{/if}
 						{#if otpRequested}Verify code & create account{:else}Continue with email verification{/if}
 					</Button>

@@ -42,6 +42,14 @@
 	let turnstileContainerRef = $state<HTMLDivElement | null>(null);
 	let turnstileReady = $state(false);
 	let turnstileSiteKey = env.PUBLIC_TURNSTILE_SITE_KEY || '';
+	const loginIdentifierValid = $derived(email.trim().length > 0);
+	const passwordValid = $derived(password.length > 0);
+	const twoFactorCodeValid = $derived(/^[0-9]{6}$/.test(twoFactorCode.trim()));
+	const recoveryCodeValid = $derived(recoveryCode.trim().length > 0);
+	const canSubmitPasswordStep = $derived(
+		loginIdentifierValid && passwordValid && (!turnstileSiteKey || (turnstileReady && !!turnstileToken))
+	);
+	const canSubmitTwoFactorStep = $derived(useRecoveryCode ? recoveryCodeValid : twoFactorCodeValid);
 
 	function getAuthenticatedRedirectTarget() {
 		const redirectParam = page.url.searchParams.get('redirect')?.trim() ?? '';
@@ -102,6 +110,10 @@
 		loading = true;
 		try {
 			if (!challengeToken) {
+				if (!loginIdentifierValid || !passwordValid) {
+					error = 'Please enter your username/email and password.';
+					return;
+				}
 				if (turnstileSiteKey && !turnstileToken && turnstileContainerRef && window.turnstile) {
 					turnstileToken = window.turnstile.getResponse(turnstileContainerRef) ?? '';
 				}
@@ -109,7 +121,7 @@
 					error = 'Please complete the CAPTCHA verification.';
 					return;
 				}
-				const result = await auth.login({ email, password, turnstile_token: turnstileToken });
+				const result = await auth.login({ email: email.trim(), password, turnstile_token: turnstileToken });
 				if (result.requires_2fa && result.two_factor_challenge_token) {
 					challengeToken = result.two_factor_challenge_token;
 					password = '';
@@ -127,10 +139,14 @@
 				goto('/');
 				return;
 			}
+			if (!canSubmitTwoFactorStep) {
+				error = useRecoveryCode ? 'Please enter a recovery code.' : 'Please enter a valid 6-digit authenticator code.';
+				return;
+			}
 
 			const result = await auth.login({
 				challenge_token: challengeToken,
-				...(useRecoveryCode ? { two_factor_recovery_code: recoveryCode } : { two_factor_code: twoFactorCode })
+				...(useRecoveryCode ? { two_factor_recovery_code: recoveryCode.trim() } : { two_factor_code: twoFactorCode.trim() })
 			});
 			if (!result.token || !result.user) {
 				throw new Error('Invalid two-factor response');
@@ -260,7 +276,7 @@
 							</div>
 						{/if}
 
-						<Button variant="brand" type="submit" class="mt-1 h-10 w-full rounded-xl" disabled={loading || (!!turnstileSiteKey && !turnstileReady)}>
+							<Button variant="brand" type="submit" class="mt-1 h-10 w-full rounded-xl" disabled={loading || !canSubmitPasswordStep}>
 							{#if loading}<Loader class="h-4 w-4 animate-spin" />{/if}
 							Sign in
 						</Button>
@@ -275,6 +291,7 @@
 									inputmode="numeric"
 									maxlength={6}
 									bind:value={twoFactorCode}
+									oninput={(e) => (twoFactorCode = (e.currentTarget as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6))}
 									autofocus
 									required
 									class="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm tracking-[0.2em] text-foreground placeholder:text-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -296,7 +313,7 @@
 						{/if}
 
 						<div class="flex flex-col gap-2">
-							<Button variant="brand" type="submit" class="h-10 rounded-xl" disabled={loading || (!useRecoveryCode && !twoFactorCode) || (useRecoveryCode && !recoveryCode)}>
+							<Button variant="brand" type="submit" class="h-10 rounded-xl" disabled={loading || !canSubmitTwoFactorStep}>
 								{#if loading}<Loader class="h-4 w-4 animate-spin" />{/if}
 								Verify and sign in
 							</Button>

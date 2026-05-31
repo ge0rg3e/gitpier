@@ -43,8 +43,6 @@
 					</div>
 					<nav class="flex flex-wrap items-center justify-center gap-4">
 						<a href="https://docs.gitpier.com" target="_blank" class="hover:text-foreground transition-colors">Docs</a>
-						<a href="/legal/privacy" class="hover:text-foreground transition-colors">Privacy Policy</a>
-						<a href="/legal/terms" class="hover:text-foreground transition-colors">Terms of Service</a>
 					</nav>
 				</div>
 			</div>
