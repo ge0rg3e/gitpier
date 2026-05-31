@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { dashboard, type DashboardPullRequest } from '$lib/api/client';
+	import { dashboard, users, type DashboardPullRequest, type Repository } from '$lib/api/client';
 	import { timeAgo } from '$lib/utils';
 	import { GitPullRequest, CircleDot, ListChecks } from '@lucide/svelte';
+	import ContributionGraph from '$lib/components/ContributionGraph.svelte';
 
 	let loading = $state(false);
 	let error = $state('');
@@ -11,6 +12,8 @@
 	let openIssuesCount = $state(0);
 	let reviewRequestsCount = $state(0);
 	let recentPulls = $state<DashboardPullRequest[]>([]);
+	let profileRepos = $state<Repository[]>([]);
+	let contributions = $state<Record<string, number>>({});
 
 	async function loadOverview() {
 		if (!authStore.user?.id) return;
@@ -21,6 +24,8 @@
 		openIssuesCount = 0;
 		reviewRequestsCount = 0;
 		recentPulls = [];
+		profileRepos = [];
+		contributions = {};
 
 		try {
 			const data = await dashboard.overview(16);
@@ -28,6 +33,16 @@
 			openIssuesCount = data.open_issues ?? 0;
 			reviewRequestsCount = data.review_requests ?? 0;
 			recentPulls = data.recent_pull_requests ?? [];
+
+			const username = authStore.user?.username;
+			if (username) {
+				const [profile, contributionData] = await Promise.all([
+					users.getProfile(username, { limit: 24, offset: 0 }),
+					users.getContributions(username).catch(() => ({ contributions: {} as Record<string, number> }))
+				]);
+				profileRepos = profile.repos ?? [];
+				contributions = contributionData.contributions ?? {};
+			}
 		} catch (e: any) {
 			error = e.message ?? 'Failed to load dashboard overview';
 		} finally {
@@ -49,6 +64,74 @@
 		const display = authStore.user?.display_name?.trim();
 		if (display) return display.split(' ')[0];
 		return authStore.user?.username ?? 'Local';
+	});
+
+	type ContributionActivity = { date: string; count: number };
+
+	function buildFallbackContributions(repos: Repository[]): Record<string, number> {
+		const fallback: Record<string, number> = {};
+		for (const repo of repos) {
+			const date = new Date(repo.updated_at);
+			if (Number.isNaN(date.getTime())) continue;
+			const day = date.toISOString().slice(0, 10);
+			fallback[day] = (fallback[day] ?? 0) + 1;
+		}
+		return fallback;
+	}
+
+	function buildYearActivity(contribs: Record<string, number>): ContributionActivity[] {
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const start = new Date(today);
+		start.setDate(start.getDate() - 52 * 7);
+		start.setDate(start.getDate() - start.getDay());
+		const out: ContributionActivity[] = [];
+		for (const cur = new Date(start); cur <= today; cur.setDate(cur.getDate() + 1)) {
+			const y = cur.getFullYear();
+			const m = String(cur.getMonth() + 1).padStart(2, '0');
+			const d = String(cur.getDate()).padStart(2, '0');
+			const key = `${y}-${m}-${d}`;
+			out.push({ date: key, count: contribs[key] ?? 0 });
+		}
+		return out;
+	}
+
+	const displayContributions = $derived.by(() => {
+		if (Object.keys(contributions).length > 0) return contributions;
+		return buildFallbackContributions(profileRepos);
+	});
+	const contributionActivity = $derived(buildYearActivity(displayContributions));
+	const totalContributions = $derived.by(() => contributionActivity.reduce((sum, day) => sum + day.count, 0));
+	const contributionTitleTemplate = '{{count}} contributions in the last year';
+
+	const recentInteractionRepos = $derived.by(() => {
+		const seen = new Set<string>();
+		const repos: Array<{ owner: string; name: string; updated_at: string; prs: number }> = [];
+
+		for (const pr of [...recentPulls].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())) {
+			const key = `${pr.repo_owner}/${pr.repo_name}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+
+			repos.push({
+				owner: pr.repo_owner,
+				name: pr.repo_name,
+				updated_at: pr.updated_at,
+				prs: recentPulls.filter((item) => item.repo_owner === pr.repo_owner && item.repo_name === pr.repo_name).length
+			});
+		}
+
+		if (repos.length > 0) return repos.slice(0, 8);
+
+		return [...profileRepos]
+			.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+			.slice(0, 8)
+			.map((repo) => ({
+				owner: repo.org?.login || repo.owner?.username || authStore.user?.username || 'unknown',
+				name: repo.name,
+				updated_at: repo.updated_at,
+				prs: 0
+			}));
 	});
 </script>
 
@@ -92,28 +175,38 @@
 			</div>
 		</section>
 
+		<section class="mb-8">
+			<h2 class="mb-3 text-xl font-medium text-muted-foreground">Activity</h2>
+			<ContributionGraph
+				data={contributionActivity}
+				totalCount={totalContributions}
+				labels={{
+					totalCount: contributionTitleTemplate,
+					legend: { less: 'Less', more: 'More' }
+				}}
+			/>
+		</section>
+
 		<section>
-			<h2 class="mb-3 text-xl font-medium text-muted-foreground">Recent Pull Requests</h2>
+			<h2 class="mb-3 text-xl font-medium text-muted-foreground">Recent Activity Repos</h2>
 			<div class="overflow-hidden rounded-2xl border border-border bg-card">
 				{#if loading}
-					<div class="h-16 bg-secondary/20 animate-pulse"></div>
-				{:else if recentPulls.length === 0}
-					<div class="px-5 py-8 text-center text-sm text-muted-foreground">No pull requests yet.</div>
+					<div class="h-20 bg-secondary/20 animate-pulse"></div>
+				{:else if recentInteractionRepos.length === 0}
+					<div class="px-5 py-8 text-center text-sm text-muted-foreground">No repository interactions yet.</div>
 				{:else}
-					{#each recentPulls as pr}
-						<a href="/{pr.repo_owner}/{pr.repo_name}/pulls/{pr.number}" class="flex items-center gap-4 border-b border-border/70 px-4 py-3 transition-colors hover:bg-secondary/30 last:border-b-0">
+					{#each recentInteractionRepos as repo}
+						<a href="/{repo.owner}/{repo.name}" class="flex items-center gap-4 border-b border-border/70 px-4 py-3 transition-colors hover:bg-secondary/30 last:border-b-0">
 							<div class="text-brand">
 								<GitPullRequest class="h-4 w-4" />
 							</div>
 							<div class="min-w-0 flex-1">
-								<p class="truncate text-sm font-medium text-foreground">{pr.title}</p>
-								<p class="truncate text-xs text-muted-foreground">{pr.repo_owner}/{pr.repo_name} #{pr.number}</p>
+								<p class="truncate text-sm font-medium text-foreground">{repo.owner}/{repo.name}</p>
+								<p class="text-xs text-muted-foreground">
+									{repo.prs > 0 ? `${repo.prs} recent pull request${repo.prs === 1 ? '' : 's'}` : 'Recently updated repository'}
+								</p>
 							</div>
-							<div class="hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
-								<span class="h-2 w-2 rounded-full bg-indigo-400/80"></span>
-								<span>{pr.author?.username ?? pr.repo_owner}</span>
-							</div>
-							<div class="shrink-0 text-xs text-muted-foreground">{timeAgo(pr.updated_at)}</div>
+							<div class="shrink-0 text-xs text-muted-foreground">{timeAgo(repo.updated_at)}</div>
 						</a>
 					{/each}
 				{/if}

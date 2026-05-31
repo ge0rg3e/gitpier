@@ -90,7 +90,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	var openIssues int64
 	if err := h.db.WithContext(ctx).
 		Model(&models.Issue{}).
-		Where("assignee_id = ? AND status = ?", currentUser.ID, models.IssueStatusOpen).
+		Where("author_id = ? AND status = ?", currentUser.ID, models.IssueStatusOpen).
 		Count(&openIssues).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load issue count")
 	}
