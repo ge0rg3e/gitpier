@@ -36,6 +36,8 @@ type Config struct {
 	AvatarsPath        string
 	PackagesPath       string
 	MarkdownAssetsPath string
+	RepoPublicSizeLimitBytes  int64
+	RepoPrivateSizeLimitBytes int64
 
 	// Secrets encryption
 	SecretEncryptionKey string
@@ -51,7 +53,7 @@ type Config struct {
 	// Workflow runner
 	DockerHost                       string
 	WorkflowRunnerImage              string
-	WorkflowMaxRunsPerMonth          int
+	WorkflowMinutesLimitPerMonth     int
 	WorkflowMaxConcurrentRuns        int
 	WorkflowContainerMemory          string
 	WorkflowContainerCPUs            string
@@ -98,11 +100,13 @@ func Load() (*Config, error) {
 		GitIdentityName:     getEnv("GIT_IDENTITY_NAME", "GitPier"),
 		GitIdentityEmail:    getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
 		AdminSystemPassword: getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
-		ReposPath:           getEnv("REPOS_PATH", "../.data/repos"),
-		SSHHostKeyPath:      getEnv("SSH_HOST_KEY_PATH", "../.data/ssh_host_key"),
-		AvatarsPath:         getEnv("AVATARS_PATH", "../.data/avatars"),
-		PackagesPath:        getEnv("PACKAGES_PATH", "../.data/packages"),
-		MarkdownAssetsPath:  getEnv("MARKDOWN_ASSETS_PATH", "../.data/markdown-assets"),
+		ReposPath:           getEnv("REPOS_PATH", "/data/repos"),
+		SSHHostKeyPath:      getEnv("SSH_HOST_KEY_PATH", "/data/ssh/ssh_host_key"),
+		AvatarsPath:         getEnv("AVATARS_PATH", "/data/avatars"),
+		PackagesPath:        getEnv("PACKAGES_PATH", "/data/packages"),
+		MarkdownAssetsPath:  getEnv("MARKDOWN_ASSETS_PATH", "/data/markdown-assets"),
+		RepoPublicSizeLimitBytes:  getEnvInt64("REPO_STORAGE_LIMIT_PUBLIC_MB", 5120) * 1024 * 1024,
+		RepoPrivateSizeLimitBytes: getEnvInt64("REPO_STORAGE_LIMIT_PRIVATE_MB", 5120) * 1024 * 1024,
 
 		// Derive the encryption key from a dedicated env var; fall back to JWT_SECRET so
 		// existing deployments keep working without extra configuration.
@@ -115,12 +119,12 @@ func Load() (*Config, error) {
 
 		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://docker:2375"),
 		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier-runner:latest"),
-		WorkflowMaxRunsPerMonth:          getEnvInt("WORKFLOW_MAX_RUNS_PER_MONTH", 50),
+		WorkflowMinutesLimitPerMonth:     getEnvInt("WORKFLOW_MINUTES_LIMIT_PER_MONTH", 5000),
 		WorkflowMaxConcurrentRuns:        getEnvInt("WORKFLOW_MAX_CONCURRENT_RUNS", 3),
 		WorkflowContainerMemory:          getEnv("WORKFLOW_CONTAINER_MEMORY", "500m"),
 		WorkflowContainerCPUs:            getEnv("WORKFLOW_CONTAINER_CPUS", "0.5"),
 		WorkflowContainerNetworkMode:     normalizeWorkflowContainerNetworkMode(getEnvOrEmpty("WORKFLOW_CONTAINER_NETWORK_MODE", "bridge")),
-		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", "../.data/workflow-workspaces"),
+		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", "/data/workflow-workspaces"),
 		WorkflowAllowDockerSocket:        getEnvOrEmpty("WORKFLOW_ALLOW_DOCKER_SOCKET", "false") == "true",
 		WorkflowContainerPidsLimit:       getEnvInt("WORKFLOW_CONTAINER_PIDS_LIMIT", 256),
 		WorkflowContainerReadOnlyRootfs:  getEnvOrEmpty("WORKFLOW_CONTAINER_READONLY_ROOTFS", "true") == "true",
@@ -205,6 +209,15 @@ func sanitizeEnvValue(val string) string {
 func getEnvInt(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+func getEnvInt64(key string, defaultVal int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
 			return i
 		}
 	}

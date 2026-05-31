@@ -6,7 +6,6 @@ import (
 	"gitpier/internal/cache"
 	"gitpier/internal/config"
 	"gitpier/internal/models"
-	"io"
 	"log"
 	"mime"
 	"net/http"
@@ -348,6 +347,7 @@ func (h *RepoHandler) Get(c echo.Context) error {
 	}
 	forkCount, _ := h.repoSvc.GetForkCount(c.Request().Context(), repo.ID)
 	repo.ForkCount = forkCount
+	repo.SizeLimitBytes = h.repoSvc.GetSizeLimit(repo)
 	sanitizeRepoForPublic(repo)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -445,6 +445,7 @@ func (h *RepoHandler) Update(c echo.Context) error {
 	var req struct {
 		Name          string `json:"name"`
 		Description   string `json:"description"`
+		Website       string `json:"website"`
 		IsPrivate     bool   `json:"is_private"`
 		DefaultBranch string `json:"default_branch"`
 	}
@@ -471,11 +472,17 @@ func (h *RepoHandler) Update(c echo.Context) error {
 	}
 
 	updates := map[string]interface{}{}
+	if len(req.Website) > 500 {
+		return echo.NewHTTPError(http.StatusBadRequest, "website URL is too long")
+	}
 	if req.Name != "" && req.Name != repo.Name {
 		updates["name"] = req.Name
 	}
 	if req.Description != "" || repo.Description != "" {
 		updates["description"] = req.Description
+	}
+	if req.Website != "" || repo.Website != "" {
+		updates["website"] = strings.TrimSpace(req.Website)
 	}
 	updates["is_private"] = req.IsPrivate
 	if req.DefaultBranch != "" {
@@ -1543,50 +1550,6 @@ func (h *RepoHandler) GetLanguages(c echo.Context) error {
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"languages": breakdown,
-	})
-}
-
-// RequestStorage handles storage limit increase requests for public repositories
-func (h *RepoHandler) RequestStorage(c echo.Context) error {
-	currentUser := c.Get("user").(*models.User)
-	username := c.Param("username")
-	repoName := c.Param("repo")
-
-	repo, err := h.repoSvc.GetByOwnerAndName(c.Request().Context(), username, repoName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "repository not found")
-	}
-
-	// Only repo owner can request storage
-	if repo.OwnerID != currentUser.ID {
-		return echo.NewHTTPError(http.StatusForbidden, "only repository owner can request storage")
-	}
-
-	// Only public repos can request storage
-	if repo.IsPrivate {
-		return echo.NewHTTPError(http.StatusBadRequest, "storage requests are only available for public repositories")
-	}
-
-	type storageRequest struct {
-		Message             string `json:"message"`
-		RequestedLimitBytes int64  `json:"requested_limit_bytes"`
-	}
-	var req storageRequest
-	if err := c.Bind(&req); err != nil && !errors.Is(err, io.EOF) {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
-	}
-
-	if req.RequestedLimitBytes < 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "requested_limit_bytes must be non-negative")
-	}
-
-	_, err = h.repoSvc.CreateStorageRequest(c.Request().Context(), repo.ID, currentUser.ID, req.RequestedLimitBytes, req.Message)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to submit storage request")
-	}
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"status":  "requested",
-		"message": "Your storage request has been submitted. Our team will review it and contact you soon.",
 	})
 }
 

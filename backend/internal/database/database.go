@@ -150,7 +150,6 @@ func Migrate(db *gorm.DB) error {
 		&models.ContainerUpload{},
 		&models.ContainerManifest{},
 		&models.ContainerTag{},
-		&models.StorageIncreaseRequest{},
 		&models.Feedback{},
 		&models.Session{},
 		// Anti-spam and security

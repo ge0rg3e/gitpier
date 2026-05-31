@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"gitpier/internal/models"
 
@@ -20,12 +19,19 @@ var (
 )
 
 type RepoService struct {
-	db        *gorm.DB
-	reposPath string
+	db                    *gorm.DB
+	reposPath             string
+	publicSizeLimitBytes  int64
+	privateSizeLimitBytes int64
 }
 
-func NewRepoService(db *gorm.DB, reposPath string) *RepoService {
-	return &RepoService{db: db, reposPath: reposPath}
+func NewRepoService(db *gorm.DB, reposPath string, publicSizeLimitBytes, privateSizeLimitBytes int64) *RepoService {
+	return &RepoService{
+		db:                    db,
+		reposPath:             reposPath,
+		publicSizeLimitBytes:  publicSizeLimitBytes,
+		privateSizeLimitBytes: privateSizeLimitBytes,
+	}
 }
 
 type CreateRepoInput struct {
@@ -466,90 +472,10 @@ func (s *RepoService) ListForksForRepo(ctx context.Context, repoID string, limit
 // GetSizeLimit returns the size limit in bytes for a repository
 // Public repos: 1GB, Private repos: 750MB
 func (s *RepoService) GetSizeLimit(repo *models.Repository) int64 {
-	if repo.SizeLimitBytes > 0 {
-		return repo.SizeLimitBytes
-	}
 	if repo.IsPrivate {
-		return 750 * 1024 * 1024 // 750MB for private
+		return s.privateSizeLimitBytes
 	}
-	return 1024 * 1024 * 1024 // 1GB for public
-}
-
-func (s *RepoService) CreateStorageRequest(ctx context.Context, repoID, requestedByUserID string, requestedLimit int64, message string) (*models.StorageIncreaseRequest, error) {
-	request := &models.StorageIncreaseRequest{
-		RepoID:            repoID,
-		RequestedByUserID: requestedByUserID,
-		RequestedLimit:    requestedLimit,
-		Message:           message,
-		Status:            models.StorageRequestStatusPending,
-	}
-	if err := s.db.WithContext(ctx).Create(request).Error; err != nil {
-		return nil, err
-	}
-	if err := s.db.WithContext(ctx).
-		Preload("Repo.Owner").
-		Preload("Repo.Org").
-		Preload("RequestedByUser").
-		Where("id = ?", request.ID).First(request).Error; err != nil {
-		return nil, err
-	}
-	return request, nil
-}
-
-func (s *RepoService) ListStorageRequests(ctx context.Context, status string, limit int) ([]models.StorageIncreaseRequest, error) {
-	q := s.db.WithContext(ctx).
-		Preload("Repo.Owner").
-		Preload("Repo.Org").
-		Preload("RequestedByUser").
-		Preload("ReviewedByUser").
-		Order("created_at DESC")
-	if status != "" {
-		q = q.Where("status = ?", status)
-	}
-	if limit > 0 {
-		q = q.Limit(limit)
-	}
-	var requests []models.StorageIncreaseRequest
-	if err := q.Find(&requests).Error; err != nil {
-		return nil, err
-	}
-	return requests, nil
-}
-
-func (s *RepoService) ReviewStorageRequest(ctx context.Context, requestID, reviewerID string, status, reviewNote string, approvedLimit int64) (*models.StorageIncreaseRequest, error) {
-	var req models.StorageIncreaseRequest
-	if err := s.db.WithContext(ctx).Where("id = ?", requestID).First(&req).Error; err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	updates := map[string]interface{}{
-		"status":              status,
-		"review_note":         reviewNote,
-		"reviewed_by_user_id": reviewerID,
-		"reviewed_at":         now,
-	}
-	if err := s.db.WithContext(ctx).Model(&req).Updates(updates).Error; err != nil {
-		return nil, err
-	}
-	if status == models.StorageRequestStatusApproved && approvedLimit > 0 {
-		if err := s.db.WithContext(ctx).
-			Model(&models.Repository{}).
-			Where("id = ?", req.RepoID).
-			Update("size_limit_bytes", approvedLimit).Error; err != nil {
-			return nil, err
-		}
-	}
-
-	if err := s.db.WithContext(ctx).
-		Preload("Repo.Owner").
-		Preload("Repo.Org").
-		Preload("RequestedByUser").
-		Preload("ReviewedByUser").
-		Where("id = ?", requestID).First(&req).Error; err != nil {
-		return nil, err
-	}
-	return &req, nil
+	return s.publicSizeLimitBytes
 }
 
 // CalculateRepoSize calculates the total size of a git repository in bytes

@@ -15,9 +15,10 @@ type Repository struct {
 	IsArchived     bool       `gorm:"not null;default:false" json:"is_archived"`
 	ArchivedAt     *time.Time `json:"archived_at,omitempty"`
 	DefaultBranch  string     `gorm:"default:main" json:"default_branch"`
+	Website        string     `gorm:"size:500;default:''" json:"website"`
 	Language       string     `gorm:"size:100;default:''" json:"language,omitempty"`
 	Size           int64      `gorm:"default:0" json:"size"` // Repository size in bytes
-	SizeLimitBytes int64      `gorm:"default:0" json:"size_limit_bytes"`
+	SizeLimitBytes int64      `gorm:"-" json:"size_limit_bytes,omitempty"`
 	IsSuspended    bool       `gorm:"not null;default:false" json:"is_suspended"`
 
 	OwnerID string        `gorm:"not null;index" json:"owner_id"`

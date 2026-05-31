@@ -29,8 +29,6 @@ type WorkflowService struct {
 	workspacePath string
 }
 
-const freeActionsMinutesPerMonth = 1500
-
 func NewWorkflowService(db *gorm.DB, gitSvc *GitService, repoSvc *RepoService, runner *WorkflowRunner, cfg *config.Config, repoEnvSvc *RepoEnvService) *WorkflowService {
 	sem := make(chan struct{}, cfg.WorkflowMaxConcurrentRuns)
 	return &WorkflowService{
@@ -486,8 +484,8 @@ func (s *WorkflowService) ensureActionsMinutesAvailable(repoID string) error {
 	if err != nil {
 		return err
 	}
-	if used >= freeActionsMinutesPerMonth {
-		return fmt.Errorf("monthly actions minutes limit (%d) reached", freeActionsMinutesPerMonth)
+	if used >= s.cfg.WorkflowMinutesLimitPerMonth {
+		return fmt.Errorf("monthly actions minutes limit (%d) reached", s.cfg.WorkflowMinutesLimitPerMonth)
 	}
 	return nil
 }
@@ -543,7 +541,7 @@ func (s *WorkflowService) getActionsUsageByScope(scopeType string, scopeID strin
 		usedMinutes = 0
 	}
 
-	return usedMinutes, freeActionsMinutesPerMonth, month, nil
+	return usedMinutes, s.cfg.WorkflowMinutesLimitPerMonth, month, nil
 }
 
 func (s *WorkflowService) GetRunsByRepo(repoID string, limit, offset int) ([]models.WorkflowRun, int64, error) {

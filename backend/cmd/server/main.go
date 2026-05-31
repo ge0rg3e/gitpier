@@ -83,7 +83,7 @@ func main() {
 
 	authSvc := services.NewAuthService(db, cfg.JWTSecret, cfg.SecretEncryptionKey, regMailer)
 	followSvc := services.NewFollowService(db)
-	repoSvc := services.NewRepoService(db, cfg.ReposPath)
+	repoSvc := services.NewRepoService(db, cfg.ReposPath, cfg.RepoPublicSizeLimitBytes, cfg.RepoPrivateSizeLimitBytes)
 	gitSvc := services.NewGitService(cfg.GitIdentityName, cfg.GitIdentityEmail)
 	orgSvc := services.NewOrgService(db)
 	cacheStore := cache.NewStore(cfg.RedisURL)
@@ -406,7 +406,6 @@ func main() {
 	api.POST("/repos/:username/:repo/unarchive", repoHandler.Unarchive, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
 	api.POST("/repos/:username/:repo/visibility", repoHandler.SetVisibility, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
 	api.DELETE("/repos/:username/:repo", repoHandler.Delete, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
-	api.POST("/repos/:username/:repo/storage-request", repoHandler.RequestStorage, apimiddleware.RequireAuth(authSvc))
 
 	// Repository contents
 	api.GET("/repos/:username/:repo/tree", repoHandler.ListTree)
