@@ -84,14 +84,9 @@
 							{/if}
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
-							<a href="/{org.login}" class="text-xs text-primary hover:underline border border-border rounded-md px-3 py-1">View</a>
-							<a
-								href="/{org.login}/settings"
-								class="h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-								title="Settings"
-							>
+							<Button href="/{org.login}/settings" title="Settings" variant="outline" size="icon">
 								<Settings class="h-3.5 w-3.5" />
-							</a>
+							</Button>
 						</div>
 					</div>
 				{/each}
