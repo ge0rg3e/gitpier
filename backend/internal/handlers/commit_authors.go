@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"strings"
+	"time"
 
 	"gitpier/internal/services"
 )
@@ -41,7 +42,12 @@ func enrichCommitAuthors(ctx context.Context, authSvc *services.AuthService, com
 		return
 	}
 
-	usersByEmail, err := authSvc.GetUsersByEmails(ctx, emails)
+	// Keep commit-author enrichment best-effort and low-latency so repository
+	// tree/blob endpoints are not blocked by slow database calls.
+	lookupCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
+
+	usersByEmail, err := authSvc.GetUsersByEmails(lookupCtx, emails)
 	if err != nil {
 		return
 	}
