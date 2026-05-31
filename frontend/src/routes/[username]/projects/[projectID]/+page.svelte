@@ -596,10 +596,12 @@
 			const nextColumns = ordered.map((column, index) => ({ ...column, position: index }));
 			project = { ...project, columns: nextColumns };
 
-			// Persist only the moved column position; backend should normalize the rest.
-			const movedNext = nextColumns.find((column) => column.id === moved.id);
-			if (!movedNext) throw new Error('Moved column not found');
-			await projects.columns.update(project.id, moved.id, { position: movedNext.position });
+			// Persist the full order to avoid duplicate positions when moving left/right.
+			const changedColumns = nextColumns.filter((column) => {
+				const prevColumn = prevColumns.find((prev) => prev.id === column.id);
+				return prevColumn?.position !== column.position;
+			});
+			await Promise.all(changedColumns.map((column) => projects.columns.update(project.id, column.id, { position: column.position })));
 			await loadProject(project.id);
 		} catch (e: any) {
 			project = { ...project, columns: prevColumns };
