@@ -2433,6 +2433,77 @@ func (s *GitService) CommitFile(repoPath, branch, filePath, content, message, au
 	return sha, nil
 }
 
+// DeleteFileCommit deletes a single file from the repository and commits the change.
+// The caller must ensure filePath and branch have already been validated.
+func (s *GitService) DeleteFileCommit(repoPath, branch, filePath, message, authorName, authorEmail string) (string, error) {
+	safeBranch, err := safeRef(branch)
+	if err != nil {
+		return "", fmt.Errorf("invalid branch: %w", err)
+	}
+	safeP, err := safeFilePath(filePath)
+	if err != nil {
+		return "", fmt.Errorf("invalid file path: %w", err)
+	}
+	if message == "" {
+		message = fmt.Sprintf("Delete %s", safeP)
+	}
+	message = strings.Map(func(r rune) rune {
+		if r == 0 {
+			return -1
+		}
+		return r
+	}, message)
+	if authorName == "" {
+		authorName = "Unknown"
+	}
+	if authorEmail == "" {
+		authorEmail = "unknown@gitpier"
+	}
+
+	tmpDir, err := os.MkdirTemp("", "gitpier-delete-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if out, err := exec.Command("git", "clone", "--quiet", "--branch", safeBranch, repoPath, tmpDir).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("clone failed: %s", string(out))
+	}
+
+	exec.Command("git", "-C", tmpDir, "config", "user.name", authorName).Run()
+	exec.Command("git", "-C", tmpDir, "config", "user.email", authorEmail).Run()
+
+	fullPath := filepath.Join(tmpDir, filepath.FromSlash(safeP))
+	if _, err := os.Stat(fullPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("file does not exist")
+		}
+		return "", fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	if out, err := exec.Command("git", "-C", tmpDir, "rm", "--", safeP).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git rm failed: %s", string(out))
+	}
+
+	statusOut, _ := exec.Command("git", "-C", tmpDir, "status", "--porcelain").Output()
+	if len(strings.TrimSpace(string(statusOut))) == 0 {
+		return "", fmt.Errorf("no changes to commit")
+	}
+
+	if out, err := exec.Command("git", "-C", tmpDir, "commit", "-m", message, "--trailer", "GitPier-Web: true").CombinedOutput(); err != nil {
+		return "", fmt.Errorf("git commit failed: %s", string(out))
+	}
+
+	shaOut, _ := exec.Command("git", "-C", tmpDir, "rev-parse", "HEAD").Output()
+	sha := strings.TrimSpace(string(shaOut))
+
+	if out, err := exec.Command("git", "-C", tmpDir, "push", "origin", safeBranch).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("push failed: %s", string(out))
+	}
+
+	return sha, nil
+}
+
 // CreateTag creates an annotated tag at the given commit or ref (or HEAD if targetRef is empty).
 func (s *GitService) CreateTag(repoPath, tagName, targetRef, message string) error {
 	if _, err := safeRef(tagName); err != nil {

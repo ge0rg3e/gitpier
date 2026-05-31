@@ -521,6 +521,12 @@ export const repos = {
 	updateBlob: (username: string, repo: string, data: { path: string; content: string; message: string; branch?: string }) =>
 		request<{ sha: string; path: string; branch: string; message: string }>(`/repos/${username}/${repo}/blob`, { method: 'PUT', body: JSON.stringify(data) }),
 
+	deleteBlob: (username: string, repo: string, data: { path: string; message: string; branch?: string }) =>
+		request<{ sha: string; path: string; branch: string; message: string }>(`/repos/${username}/${repo}/blob`, {
+			method: 'PUT',
+			body: JSON.stringify({ ...data, delete: true })
+		}),
+
 	commits: (username: string, repo: string, options?: { ref?: string; limit?: number; offset?: number; author?: string; q?: string; since?: string; until?: string }) =>
 		request<{ commits: CommitInfo[]; ref: string; limit: number; offset: number; has_more: boolean; total: number; total_pages: number }>(
 			`/repos/${username}/${repo}/commits?${new URLSearchParams({

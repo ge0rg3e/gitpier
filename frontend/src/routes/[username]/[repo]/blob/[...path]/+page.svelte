@@ -4,11 +4,12 @@
 	import { API_BASE, repos, type Repository } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
-	import { ChevronRight, Copy, CheckCheck, Code, FileText, Pencil, X, GitCommit, Clipboard } from '@lucide/svelte';
+	import { ChevronRight, Code, FileText, Pencil, X, GitCommit, Clipboard, Trash2, Ellipsis } from '@lucide/svelte';
 	import FileTreeSidebar from '$lib/components/FileTreeSidebar.svelte';
 	import CodeViewer from '$lib/components/CodeViewer.svelte';
 	import CodeEditor from '$lib/components/CodeEditor.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import { toast } from 'svelte-sonner';
@@ -25,8 +26,11 @@
 	let viewMode = $state<'raw' | 'preview'>('raw');
 	let editMode = $state(false);
 	let commitDialogOpen = $state(false);
+	let deleteDialogOpen = $state(false);
 	let commitMessage = $state('');
 	let commitDescription = $state('');
+	let deleteCommitMessage = $state('');
+	let deleteCommitDescription = $state('');
 	let committing = $state(false);
 	let commitError = $state('');
 	let mediaSizeLoading = $state(false);
@@ -210,9 +214,12 @@
 	function enterEditMode() {
 		editContent = content;
 		commitMessage = `Update ${path.split('/').pop() ?? path}`;
+		deleteCommitMessage = `Delete ${path.split('/').pop() ?? path}`;
 		commitDescription = '';
+		deleteCommitDescription = '';
 		commitError = '';
 		commitDialogOpen = false;
+		deleteDialogOpen = false;
 		editMode = true;
 	}
 
@@ -220,6 +227,13 @@
 		editMode = false;
 		editContent = content;
 		commitError = '';
+	}
+
+	function openDeleteDialog() {
+		deleteCommitMessage = `Delete ${path.split('/').pop() ?? path}`;
+		deleteCommitDescription = '';
+		commitError = '';
+		deleteDialogOpen = true;
 	}
 
 	async function commitChanges() {
@@ -245,6 +259,43 @@
 			const msg = e?.message ?? 'Failed to commit changes';
 			if (e?.status === 403) {
 				commitError = 'You do not have write access to this repository.';
+			} else if (e?.status === 422) {
+				commitError = 'No changes to commit.';
+			} else {
+				commitError = msg;
+			}
+		} finally {
+			committing = false;
+		}
+	}
+
+	async function deleteFile() {
+		if (!effectiveBranch || !deleteCommitMessage.trim()) return;
+		commitError = '';
+		committing = true;
+		const fullMessage = deleteCommitDescription.trim()
+			? `${deleteCommitMessage.trim()}\n\n${deleteCommitDescription.trim()}`
+			: deleteCommitMessage.trim();
+		try {
+			await repos.deleteBlob(username, repoName, {
+				path,
+				message: fullMessage,
+				branch: effectiveBranch
+			});
+			deleteDialogOpen = false;
+			editMode = false;
+			toast.success('File deleted successfully');
+			const parentPath = segments.length > 1 ? segments.slice(0, -1).join('/') : '';
+			const target = parentPath
+				? `/${username}/${repoName}/tree/${parentPath}${effectiveBranch ? `?ref=${effectiveBranch}` : ''}`
+				: `/${username}/${repoName}${effectiveBranch ? `?ref=${effectiveBranch}` : ''}`;
+			await goto(target);
+		} catch (e: any) {
+			const msg = e?.message ?? 'Failed to delete file';
+			if (e?.status === 403) {
+				commitError = 'You do not have write access to this repository.';
+			} else if (e?.status === 404) {
+				commitError = 'File not found on this branch.';
 			} else if (e?.status === 422) {
 				commitError = 'No changes to commit.';
 			} else {
@@ -370,6 +421,20 @@
 									<Pencil class="h-3.5 w-3.5" />
 									Edit
 								</button>
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger
+										class="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground hover:border-primary"
+										aria-label="File actions"
+										title="File actions"
+									>
+										<Ellipsis class="h-3.5 w-3.5" />
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content align="end" class="w-44">
+										<DropdownMenu.Item class="text-destructive focus:text-destructive" onclick={openDeleteDialog}>
+											<span class="flex items-center gap-2"><Trash2 class="h-3.5 w-3.5" />Delete file</span>
+										</DropdownMenu.Item>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
 							{/if}
 						{:else}
 							<button
@@ -508,6 +573,56 @@
 							{:else}
 								<GitCommit class="h-3.5 w-3.5" />
 								Commit changes
+							{/if}
+						</button>
+					</Dialog.Footer>
+				</Dialog.Content>
+			</Dialog.Root>
+			<Dialog.Root bind:open={deleteDialogOpen}>
+				<Dialog.Content>
+					<Dialog.Header>
+						<Dialog.Title class="flex items-center gap-2 text-red-300">
+							<Trash2 class="h-4 w-4" />
+							Delete file
+						</Dialog.Title>
+						<Dialog.Description>
+							Delete <span class="font-mono text-foreground">{fileName}</span> from <span class="font-mono text-foreground">{effectiveBranch}</span>
+						</Dialog.Description>
+					</Dialog.Header>
+					<div class="flex flex-col gap-3 py-2">
+						<input
+							type="text"
+							bind:value={deleteCommitMessage}
+							placeholder="Commit message"
+							maxlength="72"
+							class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+						/>
+						<textarea
+							bind:value={deleteCommitDescription}
+							placeholder="Add an optional extended description…"
+							rows={3}
+							class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors resize-none"
+						></textarea>
+						{#if commitError}<p class="text-xs text-red-400">{commitError}</p>{/if}
+					</div>
+					<Dialog.Footer class="flex gap-2 justify-end">
+						<button
+							onclick={() => (deleteDialogOpen = false)}
+							class="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							onclick={deleteFile}
+							disabled={committing || !deleteCommitMessage.trim()}
+							class="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+						>
+							{#if committing}
+								<span class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+								Deleting…
+							{:else}
+								<Trash2 class="h-3.5 w-3.5" />
+								Delete file
 							{/if}
 						</button>
 					</Dialog.Footer>

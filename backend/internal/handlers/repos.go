@@ -1612,6 +1612,7 @@ func (h *RepoHandler) UpdateBlob(c echo.Context) error {
 		Content string `json:"content"`
 		Message string `json:"message"`
 		Branch  string `json:"branch"`
+		Delete  bool   `json:"delete"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
@@ -1619,10 +1620,12 @@ func (h *RepoHandler) UpdateBlob(c echo.Context) error {
 	if req.Path == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "path is required")
 	}
-	// Enforce a reasonable file size cap (5 MB)
-	const maxFileSize = 5 * 1024 * 1024
-	if len(req.Content) > maxFileSize {
-		return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "file content exceeds 5 MB limit")
+	if !req.Delete {
+		// Enforce a reasonable file size cap (5 MB)
+		const maxFileSize = 5 * 1024 * 1024
+		if len(req.Content) > maxFileSize {
+			return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "file content exceeds 5 MB limit")
+		}
 	}
 
 	branch := req.Branch
@@ -1632,10 +1635,18 @@ func (h *RepoHandler) UpdateBlob(c echo.Context) error {
 
 	repoPath := h.repoSvc.RepoPath(h.repoSvc.RepoNamespace(repo), repoName)
 
-	sha, err := h.gitSvc.CommitFile(repoPath, branch, req.Path, req.Content, req.Message, currentUser.Username, currentUser.Email)
+	var sha string
+	if req.Delete {
+		sha, err = h.gitSvc.DeleteFileCommit(repoPath, branch, req.Path, req.Message, currentUser.Username, currentUser.Email)
+	} else {
+		sha, err = h.gitSvc.CommitFile(repoPath, branch, req.Path, req.Content, req.Message, currentUser.Username, currentUser.Email)
+	}
 	if err != nil {
 		if err.Error() == "no changes to commit" {
 			return echo.NewHTTPError(http.StatusUnprocessableEntity, "no changes to commit")
+		}
+		if err.Error() == "file does not exist" {
+			return echo.NewHTTPError(http.StatusNotFound, "file not found")
 		}
 		log.Printf("CommitFile error: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to commit file")
