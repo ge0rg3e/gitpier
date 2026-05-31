@@ -13,6 +13,7 @@ func enrichCommitInfoAuthor(ctx context.Context, authSvc *services.AuthService, 
 		return
 	}
 	enrichCommitAuthors(ctx, authSvc, []*services.CommitInfo{commit})
+	commit.Author.Email = ""
 }
 
 func enrichCommitDetailAuthor(ctx context.Context, authSvc *services.AuthService, detail *services.CommitDetail) {
@@ -23,7 +24,16 @@ func enrichCommitDetailAuthor(ctx context.Context, authSvc *services.AuthService
 }
 
 func enrichCommitAuthors(ctx context.Context, authSvc *services.AuthService, commits []*services.CommitInfo) {
-	if authSvc == nil || len(commits) == 0 {
+	if len(commits) == 0 {
+		return
+	}
+	if authSvc == nil {
+		for _, commit := range commits {
+			if commit == nil {
+				continue
+			}
+			commit.Author.Email = ""
+		}
 		return
 	}
 
@@ -39,6 +49,12 @@ func enrichCommitAuthors(ctx context.Context, authSvc *services.AuthService, com
 		emails = append(emails, email)
 	}
 	if len(emails) == 0 {
+		for _, commit := range commits {
+			if commit == nil {
+				continue
+			}
+			commit.Author.Email = ""
+		}
 		return
 	}
 
@@ -49,6 +65,12 @@ func enrichCommitAuthors(ctx context.Context, authSvc *services.AuthService, com
 
 	usersByEmail, err := authSvc.GetUsersByEmails(lookupCtx, emails)
 	if err != nil {
+		for _, commit := range commits {
+			if commit == nil {
+				continue
+			}
+			commit.Author.Email = ""
+		}
 		return
 	}
 
@@ -62,5 +84,13 @@ func enrichCommitAuthors(ctx context.Context, authSvc *services.AuthService, com
 		}
 		commit.Author.Username = user.Username
 		commit.Author.AvatarURL = user.AvatarURL
+	}
+
+	// Author email addresses are not returned by API responses.
+	for _, commit := range commits {
+		if commit == nil {
+			continue
+		}
+		commit.Author.Email = ""
 	}
 }

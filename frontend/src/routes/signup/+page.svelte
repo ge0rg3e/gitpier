@@ -44,6 +44,11 @@
 	let turnstileContainerRef = $state<HTMLDivElement | null>(null);
 	let turnstileReady = $state(false);
 	let turnstileSiteKey = env.PUBLIC_TURNSTILE_SITE_KEY || '';
+	let usernameAvailable = $state<boolean | null>(null);
+	let checkingUsernameAvailability = $state(false);
+	let usernameAvailabilityMessage = $state('');
+	let lastCheckedUsername = $state('');
+	let usernameCheckRequestId = 0;
 
 	function getAuthenticatedRedirectTarget() {
 		const redirectParam = page.url.searchParams.get('redirect')?.trim() ?? '';
@@ -76,7 +81,14 @@
 	const emailValid = $derived(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()));
 	const passwordValid = $derived(password.length >= 8);
 	const otpCodeValid = $derived(/^[0-9]{6}$/.test(otpCode.trim()));
-	const canRequestOtp = $derived(usernameValid && emailValid && passwordValid && (!turnstileSiteKey || !!turnstileToken));
+	const canRequestOtp = $derived(
+		usernameValid &&
+			usernameAvailable === true &&
+			!checkingUsernameAvailability &&
+			emailValid &&
+			passwordValid &&
+			(!turnstileSiteKey || !!turnstileToken)
+	);
 	const canVerifyOtp = $derived(otpCodeValid);
 
 	function normalizeOtp(value: string) {
@@ -111,6 +123,14 @@
 	async function requestOTP() {
 		if (!usernameValid) {
 			error = 'Username can only contain alphanumeric characters and hyphens.';
+			return;
+		}
+		if (checkingUsernameAvailability) {
+			error = 'Please wait while we check username availability.';
+			return;
+		}
+		if (usernameAvailable !== true) {
+			error = 'That username is not available. Please choose another one.';
 			return;
 		}
 		if (!emailValid) {
@@ -206,6 +226,53 @@
 	});
 
 	$effect(() => {
+		if (otpRequested) return;
+
+		const rawUsername = username.trim();
+		if (!rawUsername) {
+			checkingUsernameAvailability = false;
+			usernameAvailable = null;
+			usernameAvailabilityMessage = '';
+			lastCheckedUsername = '';
+			return;
+		}
+		if (!usernameValid) {
+			checkingUsernameAvailability = false;
+			usernameAvailable = null;
+			usernameAvailabilityMessage = '';
+			lastCheckedUsername = '';
+			return;
+		}
+		if (rawUsername === lastCheckedUsername) return;
+
+		checkingUsernameAvailability = true;
+		usernameAvailabilityMessage = '';
+		const requestId = ++usernameCheckRequestId;
+		const timeout = setTimeout(async () => {
+			try {
+				const result = await auth.checkUsernameAvailability(rawUsername);
+				if (requestId !== usernameCheckRequestId) return;
+				usernameAvailable = result.available;
+				usernameAvailabilityMessage = result.available ? 'Username is available.' : 'This username is already taken.';
+				lastCheckedUsername = rawUsername;
+			} catch (e: any) {
+				if (requestId !== usernameCheckRequestId) return;
+				usernameAvailable = null;
+				usernameAvailabilityMessage = 'Could not verify username availability. Please try again.';
+				lastCheckedUsername = '';
+			} finally {
+				if (requestId === usernameCheckRequestId) {
+					checkingUsernameAvailability = false;
+				}
+			}
+		}, 900);
+
+		return () => {
+			clearTimeout(timeout);
+		};
+	});
+
+	$effect(() => {
 		if (turnstileSiteKey && typeof window !== 'undefined' && window.turnstile && turnstileContainerRef) {
 			const container = turnstileContainerRef;
 			const observer = new MutationObserver(() => {
@@ -265,12 +332,18 @@
 							disabled={otpRequested}
 							autofocus
 							class="h-10 w-full rounded-xl border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-							class:border-emerald-500={username && usernameValid}
-							class:border-red-500={username && !usernameValid}
+							class:border-emerald-500={username && usernameValid && usernameAvailable === true}
+							class:border-red-500={username && (!usernameValid || usernameAvailable === false)}
 							class:border-border={!username}
 						/>
 						{#if username && !usernameValid}
 							<p class="mt-1 text-xs text-red-400">Username may only contain alphanumeric characters or single hyphens.</p>
+						{:else if username && checkingUsernameAvailability}
+							<p class="mt-1 text-xs text-muted-foreground">Checking username availability...</p>
+						{:else if username && usernameAvailabilityMessage}
+							<p class="mt-1 text-xs" class:text-emerald-400={usernameAvailable === true} class:text-red-400={usernameAvailable === false} class:text-muted-foreground={usernameAvailable === null}>
+								{usernameAvailabilityMessage}
+							</p>
 						{/if}
 					</div>
 

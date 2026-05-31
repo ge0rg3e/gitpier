@@ -67,18 +67,18 @@ func main() {
 	}
 
 	// Services
-	mailerooEmailSvc := services.NewMailerooEmailService(services.MailerooEmailConfig{
-		APIKey:   cfg.MailerooAPIKey,
-		BaseURL:  cfg.MailerooBaseURL,
-		From:     cfg.MailerooFrom,
-		FromName: cfg.MailerooFromName,
+	smtpEmailSvc := services.NewSMTPEmailService(services.SMTPEmailConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+		FromName: cfg.SMTPFromName,
 	})
 	var regMailer services.RegistrationMailer
-	if mailerooEmailSvc.IsConfigured() {
-		regMailer = mailerooEmailSvc
-		log.Printf("registration OTP emails enabled via Maileroo API")
-	} else {
-		log.Printf("[WARN] Maileroo email transport is not configured; registration OTP codes will be logged to server output")
+	if smtpEmailSvc.IsConfigured() {
+		regMailer = smtpEmailSvc
+		log.Printf("registration OTP emails enabled via SMTP")
 	}
 
 	authSvc := services.NewAuthService(db, cfg.JWTSecret, cfg.SecretEncryptionKey, regMailer)
@@ -332,6 +332,7 @@ func main() {
 	api.Use(apimiddleware.RequireRepoWritable(repoSvc))
 
 	// Auth
+	api.GET("/auth/username-availability", authHandler.CheckUsernameAvailability, authRateLimiter)
 	api.POST("/auth/register", authHandler.Register, authRateLimiter)
 	api.POST("/auth/register/verify", authHandler.VerifyRegistrationOTP, authRateLimiter)
 	api.POST("/auth/login", authHandler.Login, authRateLimiter)

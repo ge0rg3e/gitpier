@@ -45,16 +45,15 @@
 		return items;
 	});
 	const authorOptions = $derived.by(() => {
-		const authors = new Map<string, { name: string; email: string }>();
+		const authors = new Map<string, { name: string }>();
 		if (author.trim()) {
-			authors.set(author.toLowerCase(), { name: author.trim(), email: '' });
+			authors.set(author.toLowerCase(), { name: author.trim() });
 		}
 		for (const commit of commits) {
 			const name = commit.author?.name?.trim();
 			if (!name) continue;
-			const email = commit.author?.email?.trim() ?? '';
-			const key = `${name.toLowerCase()}|${email.toLowerCase()}`;
-			if (!authors.has(key)) authors.set(key, { name, email });
+			const key = name.toLowerCase();
+			if (!authors.has(key)) authors.set(key, { name });
 		}
 		return [...authors.values()].sort((left, right) => left.name.localeCompare(right.name));
 	});
@@ -77,7 +76,7 @@
 	const filteredAuthorOptions = $derived.by(() => {
 		const search = authorSearch.trim().toLowerCase();
 		if (!search) return authorOptions;
-		return authorOptions.filter((option) => `${option.name} ${option.email}`.toLowerCase().includes(search));
+		return authorOptions.filter((option) => option.name.toLowerCase().includes(search));
 	});
 	const usersLabel = $derived(author.trim() || 'All users');
 	const timeLabel = $derived.by(() => {
@@ -329,9 +328,7 @@
 						<Command.Root class="rounded-none border-0 bg-card p-0">
 							<Command.Input bind:value={authorSearch} placeholder="Find a user..." />
 							<Command.List class="max-h-64 border-t border-border/60">
-								{#if authorSearch.trim() && !filteredAuthorOptions.some((option) => option.name.toLowerCase() === authorSearch
-													.trim()
-													.toLowerCase() || option.email.toLowerCase() === authorSearch.trim().toLowerCase())}
+								{#if authorSearch.trim() && !filteredAuthorOptions.some((option) => option.name.toLowerCase() === authorSearch.trim().toLowerCase())}
 									<Command.Item value={authorSearch.trim()} onclick={() => applyAuthorFilter(authorSearch.trim())}>
 										<div class="flex min-w-0 items-center gap-2">
 											<div class="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-secondary text-[11px] font-semibold text-foreground">
@@ -344,16 +341,13 @@
 									</Command.Item>
 								{/if}
 								{#each filteredAuthorOptions as option}
-									<Command.Item value={`${option.name} ${option.email}`} onclick={() => applyAuthorFilter(option.name)}>
+									<Command.Item value={option.name} onclick={() => applyAuthorFilter(option.name)}>
 										<div class="flex min-w-0 items-center gap-2">
 											<div class="flex h-5 w-5 items-center justify-center rounded-full border border-border bg-secondary text-[11px] font-semibold text-foreground">
 												{option.name.slice(0, 1).toUpperCase()}
 											</div>
 											<div class="min-w-0">
 												<p class="truncate text-sm text-foreground">{option.name}</p>
-												{#if option.email}
-													<p class="truncate text-xs text-muted-foreground">{option.email}</p>
-												{/if}
 											</div>
 										</div>
 									</Command.Item>

@@ -206,7 +206,7 @@ func (s *AuthService) RequestRegistrationOTP(ctx context.Context, input Register
 			return "", time.Time{}, fmt.Errorf("failed to send registration otp: %w", err)
 		}
 	} else {
-		log.Printf("[DEBUG] Registration OTP for %s (%s): %s (expires: %s)", pending.Username, pending.Email, otpCode, expiresAt.Format(time.RFC3339))
+		log.Printf("[OTP] registration email=%s code=%s username=%s expires=%s", pending.Email, otpCode, pending.Username, expiresAt.Format(time.RFC3339))
 	}
 
 	return registrationToken, expiresAt, nil

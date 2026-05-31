@@ -31,11 +31,11 @@ type Config struct {
 	AdminSystemPassword string
 
 	// Storage
-	ReposPath          string
-	SSHHostKeyPath     string
-	AvatarsPath        string
-	PackagesPath       string
-	MarkdownAssetsPath string
+	ReposPath                 string
+	SSHHostKeyPath            string
+	AvatarsPath               string
+	PackagesPath              string
+	MarkdownAssetsPath        string
 	RepoPublicSizeLimitBytes  int64
 	RepoPrivateSizeLimitBytes int64
 
@@ -79,11 +79,13 @@ type Config struct {
 	RepoCreationAllowUsers []string
 	SelfHostURL            string
 
-	// Email: Maileroo API delivery
-	MailerooAPIKey   string
-	MailerooBaseURL  string
-	MailerooFrom     string
-	MailerooFromName string
+	// Email: SMTP delivery
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+	SMTPFromName string
 }
 
 func Load() (*Config, error) {
@@ -91,20 +93,20 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
-		SSHPort:             getEnv("SSH_PORT", "2222"),
-		AppURL:              getEnv("APP_URL", "http://localhost:8080"),
-		DatabaseURL:         getEnv("DATABASE_URL", ""),
-		RedisURL:            getEnvOrEmpty("REDIS_URL", ""),
-		JWTSecret:           getEnv("JWT_SECRET", ""),
-		GitIdentityName:     getEnv("GIT_IDENTITY_NAME", "GitPier"),
-		GitIdentityEmail:    getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
-		AdminSystemPassword: getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
-		ReposPath:           getEnv("REPOS_PATH", "/data/repos"),
-		SSHHostKeyPath:      getEnv("SSH_HOST_KEY_PATH", "/data/ssh/ssh_host_key"),
-		AvatarsPath:         getEnv("AVATARS_PATH", "/data/avatars"),
-		PackagesPath:        getEnv("PACKAGES_PATH", "/data/packages"),
-		MarkdownAssetsPath:  getEnv("MARKDOWN_ASSETS_PATH", "/data/markdown-assets"),
+		Port:                      getEnv("PORT", "8080"),
+		SSHPort:                   getEnv("SSH_PORT", "2222"),
+		AppURL:                    getEnv("APP_URL", "http://localhost:8080"),
+		DatabaseURL:               getEnv("DATABASE_URL", ""),
+		RedisURL:                  getEnvOrEmpty("REDIS_URL", ""),
+		JWTSecret:                 getEnv("JWT_SECRET", ""),
+		GitIdentityName:           getEnv("GIT_IDENTITY_NAME", "GitPier"),
+		GitIdentityEmail:          getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
+		AdminSystemPassword:       getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
+		ReposPath:                 getEnv("REPOS_PATH", "/data/repos"),
+		SSHHostKeyPath:            getEnv("SSH_HOST_KEY_PATH", "/data/ssh/ssh_host_key"),
+		AvatarsPath:               getEnv("AVATARS_PATH", "/data/avatars"),
+		PackagesPath:              getEnv("PACKAGES_PATH", "/data/packages"),
+		MarkdownAssetsPath:        getEnv("MARKDOWN_ASSETS_PATH", "/data/markdown-assets"),
 		RepoPublicSizeLimitBytes:  getEnvInt64("REPO_STORAGE_LIMIT_PUBLIC_MB", 5120) * 1024 * 1024,
 		RepoPrivateSizeLimitBytes: getEnvInt64("REPO_STORAGE_LIMIT_PRIVATE_MB", 5120) * 1024 * 1024,
 
@@ -144,10 +146,12 @@ func Load() (*Config, error) {
 		),
 		SelfHostURL: getEnvOrEmpty("SELF_HOST_URL", "https://github.com/gitpier/gitpier"),
 
-		MailerooAPIKey:   getEnvOrEmpty("MAILEROO_API_KEY", ""),
-		MailerooBaseURL:  getEnvOrEmpty("MAILEROO_BASE_URL", "https://smtp.maileroo.com/api/v2"),
-		MailerooFrom:     getEnvOrEmpty("MAILEROO_FROM", "noreply@gitpier.com"),
-		MailerooFromName: getEnvOrEmpty("MAILEROO_FROM_NAME", "GitPier"),
+		SMTPHost:     getEnvOrEmpty("SMTP_HOST", ""),
+		SMTPPort:     getEnvInt("SMTP_PORT", 587),
+		SMTPUsername: getEnvOrEmpty("SMTP_USERNAME", ""),
+		SMTPPassword: getEnvOrEmpty("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnvOrEmpty("SMTP_FROM", "noreply@gitpier.com"),
+		SMTPFromName: getEnvOrEmpty("SMTP_FROM_NAME", "GitPier"),
 	}
 
 	// Resolve relative paths to absolute so they work regardless of working directory.

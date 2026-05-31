@@ -102,6 +102,32 @@ type registerOTPResponse struct {
 	ExpiresInSeconds  int64  `json:"expires_in_seconds"`
 }
 
+func (h *AuthHandler) CheckUsernameAvailability(c echo.Context) error {
+	username := strings.TrimSpace(c.QueryParam("username"))
+	if len(username) < 1 || len(username) > 39 {
+		return echo.NewHTTPError(http.StatusBadRequest, "username must be 1-39 characters")
+	}
+	if !usernameRe.MatchString(username) {
+		return echo.NewHTTPError(http.StatusBadRequest, "username can only contain alphanumeric characters and hyphens")
+	}
+
+	_, err := h.authSvc.GetUserByUsername(c.Request().Context(), username)
+	if err == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"username":  username,
+			"available": false,
+		})
+	}
+	if errors.Is(err, services.ErrUserNotFound) {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"username":  username,
+			"available": true,
+		})
+	}
+
+	return echo.NewHTTPError(http.StatusInternalServerError, "failed to check username availability")
+}
+
 func (h *AuthHandler) Register(c echo.Context) error {
 	var req registerRequest
 	if err := c.Bind(&req); err != nil {

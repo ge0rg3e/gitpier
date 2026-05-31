@@ -101,6 +101,25 @@
 	);
 	const setupExistingRepoCmd = $derived(`git remote add origin ssh://git@${sshCloneHost}/${username}/${repo}.git\ngit branch -M main\ngit push -u origin main`);
 
+	function formatReleaseDate(value?: string | null): string {
+		if (!value) return '';
+		const d = new Date(value);
+		if (Number.isNaN(d.getTime())) return '';
+		return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+	}
+
+	function hrefForWebsite(value?: string): string {
+		const trimmed = value?.trim() ?? '';
+		if (!trimmed) return '';
+		if (/^https?:\/\//i.test(trimmed)) return trimmed;
+		return `https://${trimmed}`;
+	}
+
+	function displayWebsite(value?: string): string {
+		const trimmed = value?.trim() ?? '';
+		return trimmed.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+	}
+
 	async function loadTree() {
 		const seq = ++loadSeq;
 		loading = true;
@@ -652,6 +671,18 @@
 				{:else}
 					<p class="text-sm text-muted-foreground mb-3 italic">No description provided yet.</p>
 				{/if}
+
+				{#if layoutRepo?.website}
+					<a
+						href={hrefForWebsite(layoutRepo.website)}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+					>
+						<Link class="h-4 w-4" />
+						<span class="truncate">{displayWebsite(layoutRepo.website)}</span>
+					</a>
+				{/if}
 			</div>
 
 			<hr class="border-secondary" />
@@ -764,16 +795,27 @@
 					</h2>
 				</div>
 				{#if latestRelease}
-					<a href="/{username}/{repo}/releases/{latestRelease.id}" class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group mb-2">
+					<a href="/{username}/{repo}/releases/{latestRelease.id}" class="flex items-start gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group mb-2">
 						<Tag class="h-4 w-4 text-muted-foreground shrink-0" />
-						<span class="font-mono text-foreground group-hover:underline truncate">{latestRelease.tag_name}</span>
-						{#if latestRelease.is_prerelease}
-							<span class="text-xs border border-orange-400/50 text-orange-400 rounded-full px-1.5 py-0.5 shrink-0">Pre-release</span>
-						{:else}
-							<span class="text-xs border border-primary/40 text-primary rounded-full px-1.5 py-0.5 shrink-0">Latest</span>
-						{/if}
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-2">
+								<span class="font-mono text-foreground group-hover:underline truncate">{latestRelease.tag_name}</span>
+								{#if latestRelease.is_prerelease}
+									<span class="text-xs border border-orange-400/50 text-orange-400 rounded-full px-1.5 py-0.5 shrink-0">Pre-release</span>
+								{:else}
+									<span class="text-xs border border-primary/40 text-primary rounded-full px-1.5 py-0.5 shrink-0">Latest</span>
+								{/if}
+							</div>
+							{#if formatReleaseDate(latestRelease.published_at ?? latestRelease.created_at)}
+								<p class="text-xs text-muted-foreground mt-1">
+									on {formatReleaseDate(latestRelease.published_at ?? latestRelease.created_at)}
+								</p>
+							{/if}
+						</div>
 					</a>
-					<p class="text-xs text-muted-foreground">{latestRelease.name || latestRelease.tag_name}</p>
+					{#if latestRelease.name && latestRelease.name !== latestRelease.tag_name}
+						<p class="text-xs text-muted-foreground">{latestRelease.name}</p>
+					{/if}
 				{:else}
 					<p class="text-xs text-muted-foreground mb-1">No releases published</p>
 					{#if layoutRepo && authStore.user?.id === layoutRepo.owner_id}

@@ -1,11 +1,9 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"net/smtp"
 	"strings"
 	"time"
 )
@@ -14,45 +12,42 @@ type RegistrationMailer interface {
 	SendRegistrationOTP(ctx context.Context, toEmail, toUsername, otpCode string, expiresAt time.Time) error
 }
 
-type MailerooEmailService struct {
-	apiKey   string
-	baseURL  string
+type SMTPEmailService struct {
+	host     string
+	port     int
+	username string
+	password string
 	from     string
 	fromName string
-	client   *http.Client
 }
 
-type MailerooEmailConfig struct {
-	APIKey   string
-	BaseURL  string
+type SMTPEmailConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
 	From     string
 	FromName string
-	Timeout  time.Duration
 }
 
-func NewMailerooEmailService(cfg MailerooEmailConfig) *MailerooEmailService {
-	timeout := cfg.Timeout
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	return &MailerooEmailService{
-		apiKey:   strings.TrimSpace(cfg.APIKey),
-		baseURL:  strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
+func NewSMTPEmailService(cfg SMTPEmailConfig) *SMTPEmailService {
+	return &SMTPEmailService{
+		host:     strings.TrimSpace(cfg.Host),
+		port:     cfg.Port,
+		username: strings.TrimSpace(cfg.Username),
+		password: strings.TrimSpace(cfg.Password),
 		from:     strings.TrimSpace(cfg.From),
 		fromName: strings.TrimSpace(cfg.FromName),
-		client: &http.Client{
-			Timeout: timeout,
-		},
 	}
 }
 
-func (s *MailerooEmailService) IsConfigured() bool {
-	return s != nil && s.apiKey != "" && s.baseURL != "" && s.from != ""
+func (s *SMTPEmailService) IsConfigured() bool {
+	return s != nil && s.host != "" && s.port > 0 && s.from != ""
 }
 
-func (s *MailerooEmailService) SendRegistrationOTP(ctx context.Context, toEmail, toUsername, otpCode string, expiresAt time.Time) error {
+func (s *SMTPEmailService) SendRegistrationOTP(ctx context.Context, toEmail, toUsername, otpCode string, expiresAt time.Time) error {
 	if !s.IsConfigured() {
-		return fmt.Errorf("maileroo email service is not configured")
+		return fmt.Errorf("smtp email service is not configured")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -75,38 +70,34 @@ func (s *MailerooEmailService) SendRegistrationOTP(ctx context.Context, toEmail,
 		"If you did not request this, you can ignore this email.",
 	}, "\n")
 
-	payload := map[string]interface{}{
-		"from": map[string]string{
-			"address":      s.from,
-			"display_name": s.fromName,
-		},
-		"to": map[string]string{
-			"address":      strings.TrimSpace(toEmail),
-			"display_name": strings.TrimSpace(toUsername),
-		},
-		"subject": subject,
-		"plain":   plain,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal maileroo payload: %w", err)
+	to := strings.TrimSpace(toEmail)
+	if to == "" {
+		return fmt.Errorf("recipient email is empty")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/emails", bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("build maileroo request: %w", err)
+	fromHeader := s.from
+	if s.fromName != "" {
+		fromHeader = fmt.Sprintf("%s <%s>", s.fromName, s.from)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
 
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("maileroo request failed: %w", err)
+	msg := strings.Join([]string{
+		fmt.Sprintf("From: %s", fromHeader),
+		fmt.Sprintf("To: %s", to),
+		fmt.Sprintf("Subject: %s", subject),
+		"MIME-Version: 1.0",
+		"Content-Type: text/plain; charset=UTF-8",
+		"",
+		plain,
+	}, "\r\n")
+
+	var auth smtp.Auth
+	if s.username != "" || s.password != "" {
+		auth = smtp.PlainAuth("", s.username, s.password, s.host)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("maileroo returned status %d", resp.StatusCode)
+	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	if err := smtp.SendMail(addr, auth, s.from, []string{to}, []byte(msg)); err != nil {
+		return fmt.Errorf("smtp send failed: %w", err)
 	}
 	return nil
 }

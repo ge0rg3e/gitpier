@@ -51,6 +51,7 @@ export interface Repository {
 	id: number;
 	name: string;
 	description: string;
+	website?: string;
 	is_private: boolean;
 	is_archived?: boolean;
 	archived_at?: string;
@@ -128,7 +129,7 @@ export interface CommitInfo {
 	message: string;
 	author: {
 		name: string;
-		email: string;
+		email?: string;
 		date: string;
 		username?: string;
 		avatar_url?: string;
@@ -163,7 +164,7 @@ export interface CommitDetail {
 	message: string;
 	author: {
 		name: string;
-		email: string;
+		email?: string;
 		date: string;
 		username?: string;
 		avatar_url?: string;
@@ -200,6 +201,11 @@ export interface RegisterOTPResponse {
 	message: string;
 	registration_token: string;
 	expires_in_seconds: number;
+}
+
+export interface UsernameAvailabilityResponse {
+	username: string;
+	available: boolean;
 }
 
 export interface TwoFactorStatus {
@@ -292,6 +298,9 @@ async function requestUpload<T>(path: string, formData: FormData): Promise<T> {
 
 // Auth
 export const auth = {
+	checkUsernameAvailability: (username: string) =>
+		request<UsernameAvailabilityResponse>(`/auth/username-availability?${new URLSearchParams({ username })}`),
+
 	requestRegisterOTP: (username: string, email: string, password: string, gdprConsent: boolean, turnstileToken: string) =>
 		request<RegisterOTPResponse>('/auth/register', {
 			method: 'POST',
@@ -486,7 +495,7 @@ export const repos = {
 			})}`
 		),
 
-	update: (username: string, repo: string, data: Partial<{ name?: string; description?: string; is_private?: boolean; default_branch?: string }>) =>
+	update: (username: string, repo: string, data: Partial<{ name?: string; description?: string; website?: string; is_private?: boolean; default_branch?: string }>) =>
 		request<Repository>(`/repos/${username}/${repo}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
 	setVisibility: (username: string, repo: string, isPrivate: boolean, confirmPassword: string) =>
@@ -1847,23 +1856,6 @@ export const adminSystem = {
 			headers: { 'X-System-Admin-Password': password }
 		})
 };
-
-export interface StorageIncreaseRequest {
-	id: number;
-	repo_id: number;
-	requested_by_user_id: number;
-	requested_limit_bytes: number;
-	message: string;
-	status: 'pending' | 'approved' | 'rejected';
-	review_note: string;
-	reviewed_by_user_id?: number;
-	reviewed_at?: string;
-	created_at: string;
-	updated_at: string;
-	repo: Repository;
-	requested_by_user: User;
-	reviewed_by_user?: User;
-}
 
 export interface FeedbackEntry {
 	id: number;

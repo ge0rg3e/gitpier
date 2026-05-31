@@ -2,9 +2,9 @@
 	import { page } from '$app/state';
 	import { getContext, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { repos, API_BASE, type Repository } from '$lib/api/client';
+	import { repos, type Repository } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { Trash2, AlertTriangle, Loader, Settings, HardDrive, Archive, RotateCcw, Lock, Unlock } from '@lucide/svelte';
+	import { Trash2, AlertTriangle, Loader, Settings, Archive, RotateCcw, Lock, Unlock } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ConfirmPasswordDialog from '$lib/components/ConfirmPasswordDialog.svelte';
 
@@ -14,6 +14,7 @@
 
 	let repoNameValue = $state('');
 	let description = $state('');
+	let website = $state('');
 	let isPrivate = $state(false);
 	let defaultBranch = $state('main');
 	let saving = $state(false);
@@ -23,9 +24,6 @@
 	let deleting = $state(false);
 	let showDeleteDialog = $state(false);
 
-	let requestingStorage = $state(false);
-	let storageError = $state('');
-	let storageSuccess = $state(false);
 	let archiving = $state(false);
 	let unarchiving = $state(false);
 	let archiveError = $state('');
@@ -69,6 +67,7 @@
 			}
 			repoNameValue = repo.name;
 			description = repo.description ?? '';
+			website = repo.website ?? '';
 			isPrivate = repo.is_private;
 			defaultBranch = repo.default_branch;
 		} catch (e: any) {
@@ -92,6 +91,7 @@
 			const updated = await repos.update(username, repoName, {
 				name: nameChanged ? repoNameValue.trim() : undefined,
 				description,
+				website,
 				is_private: isPrivate,
 				default_branch: defaultBranch
 			});
@@ -118,35 +118,6 @@
 		}
 	}
 
-	async function requestStorage() {
-		if (repo?.is_archived) {
-			storageError = 'Repository is archived and read-only. Unarchive it to request storage changes.';
-			return;
-		}
-		requestingStorage = true;
-		storageError = '';
-		storageSuccess = false;
-		try {
-			const response = await fetch(`${API_BASE}/api/v1/repos/${username}/${repoName}/storage-request`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${authStore.token}`
-				}
-			});
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || 'Failed to request storage');
-			}
-			storageSuccess = true;
-			setTimeout(() => (storageSuccess = false), 3000);
-		} catch (e: any) {
-			storageError = e.message;
-		} finally {
-			requestingStorage = false;
-		}
-	}
-
 	function formatBytes(bytes: number): string {
 		if (bytes === 0) return '0 B';
 		const k = 1024;
@@ -156,8 +127,7 @@
 	}
 
 	function getStorageLimit(): number {
-		// Public: 1GB, Private: 750MB
-		return repo?.is_private ? 750 * 1024 * 1024 : 1024 * 1024 * 1024;
+		return repo?.size_limit_bytes || 1;
 	}
 
 	function formatArchivedAt(archivedAt?: string): string {
@@ -264,6 +234,17 @@
 			</div>
 
 			<div>
+				<p class="block text-sm font-semibold text-foreground mb-1.5">Website URL <span class="font-normal text-muted-foreground">(optional)</span></p>
+				<input
+					type="url"
+					bind:value={website}
+					disabled={repo.is_archived}
+					placeholder="https://example.com"
+					class="h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+				/>
+			</div>
+
+			<div>
 				<p class="block text-sm font-semibold text-foreground mb-1.5">Default branch</p>
 				<input
 					type="text"
@@ -274,7 +255,6 @@
 				/>
 			</div>
 
-			<hr class="border-secondary" />
 			<div class="flex justify-end">
 				<Button variant="brand" type="submit" disabled={saving || repo.is_archived}>
 					{#if saving}<Loader class="h-4 w-4 animate-spin" />{/if}
@@ -282,60 +262,6 @@
 				</Button>
 			</div>
 		</form>
-
-		<hr class="border-secondary my-8" />
-
-		<div class="mb-8">
-			<h2 class="text-sm font-semibold text-foreground mb-2 flex items-center gap-2"><HardDrive class="h-4 w-4" />Storage</h2>
-
-			{#if repo?.is_private}
-				<p class="text-xs text-muted-foreground mb-4">
-					We're a small platform just getting started, so we keep default storage limits modest to stay sustainable.<br />If you need more space, you can upgrade to a Pro plan to increase
-					your storage limit for all your private repos.
-				</p>
-			{:else}
-				<p class="text-xs text-muted-foreground mb-4">
-					We're a small platform just getting started, so we keep default storage limits modest to stay sustainable.<br />If this is an open-source project that genuinely needs more space,
-					we're happy to bump it up, just send a request and we'll take a look.
-				</p>
-			{/if}
-
-			{#if storageSuccess}
-				<div class="mb-4 rounded-md border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-[#3fb950]">Storage request submitted. Our team will review it and contact you soon.</div>
-			{/if}
-
-			{#if storageError}
-				<div class="mb-4 rounded-md border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">{storageError}</div>
-			{/if}
-
-			<div class="rounded-md border border-border bg-card p-4 mb-4">
-				<p class="text-sm text-foreground mb-3">
-					Your repository is <strong>{repo?.is_private ? 'private (750 MB limit)' : 'public (1 GB limit)'}</strong>
-				</p>
-				<p class="text-xs text-muted-foreground mb-4">
-					Current size: <strong>{formatBytes(repo?.size || 0)}</strong> / {formatBytes(getStorageLimit())}
-				</p>
-				<div class="w-full bg-secondary rounded-full h-2 mb-3">
-					<div class="bg-primary h-2 rounded-full transition-all" style="width: {Math.min(100, ((repo?.size || 0) / getStorageLimit()) * 100)}%"></div>
-				</div>
-				<p class="text-xs text-muted-foreground">
-					{Math.min(100, ((repo?.size || 0) / getStorageLimit()) * 100).toFixed(1)}% used
-				</p>
-			</div>
-
-			{#if repo?.is_private}
-				<Button variant="outline" size="sm" disabled title="Pro plans are coming soon">Upgrade to Pro — Coming Soon</Button>
-			{:else}
-				<div class="flex items-center gap-2">
-					<Button variant="outline" size="sm" onclick={requestStorage} disabled={requestingStorage || repo.is_archived}>
-						{#if requestingStorage}<Loader class="h-3.5 w-3.5 animate-spin" />{/if}
-						Request Additional Storage
-					</Button>
-					<span class="text-muted-foreground text-sm">or</span>
-					<Button variant="outline" size="sm" disabled title="Pro plans are coming soon">Upgrade to Pro — Coming Soon</Button>
-				</div>
-			{/if}
-		</div>
 
 		<hr class="border-secondary my-8" />
 

@@ -283,7 +283,7 @@
 		<div class="mb-8">
 			<h2 class="text-sm font-semibold text-foreground mb-2 flex items-center gap-2"><Zap class="h-4 w-4" />Actions</h2>
 			<p class="text-xs text-muted-foreground mb-4">
-				Actions usage is capped at 1,500 minutes per month for your organization. When the limit is reached, workflows stop running until the next month.
+				Actions usage is capped at {formatMinutes(Math.max(1, actionsUsage?.limit_minutes ?? 1))} per month for your organization. When the limit is reached, workflows stop running until the next month.
 			</p>
 
 			{#if actionsUsageError}
@@ -311,7 +311,6 @@
 				{/if}
 			</div>
 
-			<Button variant="outline" size="sm" disabled title="Pro plans are coming soon">Upgrade to Pro - Coming Soon</Button>
 		</div>
 
 		<hr class="border-secondary my-8" />
