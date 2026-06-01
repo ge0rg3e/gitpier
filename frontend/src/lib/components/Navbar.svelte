@@ -58,6 +58,15 @@
 		if (p.username && p.repo) return { owner: p.username, repo: p.repo };
 		return null;
 	});
+	const searchRepoContext = $derived.by(() => {
+		const scopedRepo = page.url.searchParams.get('repo')?.trim() ?? '';
+		if (!scopedRepo.includes('/')) return null;
+		const [owner, ...repoParts] = scopedRepo.split('/').filter(Boolean);
+		const repo = repoParts.join('/');
+		if (!owner || !repo) return null;
+		return { owner, repo };
+	});
+	const commandRepoContext = $derived.by(() => repoContext ?? searchRepoContext);
 	const profileContext = $derived.by(() => {
 		const p = page.params;
 		if (p.username && !p.repo) return { username: p.username };
@@ -655,30 +664,30 @@
 				<Command.Input bind:ref={searchInputEl} bind:value={searchQuery} placeholder="Type to search..." />
 				<Command.List>
 					<Command.Group heading="Actions">
-						{#if repoContext}
+						{#if commandRepoContext}
 							<Command.LinkItem
 								href={`/search?${new URLSearchParams({
 									q: liveSearchTerms,
-									repo: `${repoContext.owner}/${repoContext.repo}`,
+									repo: `${commandRepoContext.owner}/${commandRepoContext.repo}`,
 									type: 'code'
 								})}`}
 								onclick={() => (searchDialogOpen = false)}
 								value={`code:${liveSearchTerms}`}
 							>
 								<Code class="h-4 w-4" />
-								Search code in {repoContext.owner}/{repoContext.repo} for <strong>{liveSearchTerms}</strong>
+								Search code in {commandRepoContext.owner}/{commandRepoContext.repo} for <strong>{liveSearchTerms}</strong>
 							</Command.LinkItem>
 							<Command.LinkItem
 								href={`/search?${new URLSearchParams({
 									q: liveSearchTerms,
-									repo: `${repoContext.owner}/${repoContext.repo}`,
+									repo: `${commandRepoContext.owner}/${commandRepoContext.repo}`,
 									type: 'files'
 								})}`}
 								onclick={() => (searchDialogOpen = false)}
 								value={`files:${liveSearchTerms}`}
 							>
 								<File class="h-4 w-4" />
-								Search files in {repoContext.owner}/{repoContext.repo} for <strong>{liveSearchTerms}</strong>
+								Search files in {commandRepoContext.owner}/{commandRepoContext.repo} for <strong>{liveSearchTerms}</strong>
 							</Command.LinkItem>
 						{/if}
 						<Command.Item onclick={handleSearch} value={`search:${liveSearchTerms}`}>
