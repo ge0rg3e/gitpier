@@ -2,7 +2,6 @@
 	import './layout.css';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import AlphaBanner from '$lib/components/AlphaBanner.svelte';
-	import CookieConsent from '$lib/components/CookieConsent.svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { onMount } from 'svelte';
 
@@ -48,6 +47,4 @@
 			</div>
 		</div>
 	</footer>
-
-	<CookieConsent />
 </div>
