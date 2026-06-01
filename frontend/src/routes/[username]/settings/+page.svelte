@@ -315,8 +315,8 @@
 
 		<hr class="border-secondary my-8" />
 
-		<div class="rounded-md border border-red-800/40 p-4">
-			<h2 class="text-sm font-semibold text-red-400 mb-1 flex items-center gap-2">
+		<div>
+			<h2 class="text-base font-semibold text-red-400 mb-3 flex items-center gap-2">
 				<AlertTriangle class="h-4 w-4" />Danger Zone
 			</h2>
 			<p class="text-xs text-muted-foreground mb-4">Once you delete an organization, there is no going back.</p>

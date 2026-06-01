@@ -179,7 +179,42 @@
 </svelte:head>
 
 {#if loading}
-	<div class="text-center py-12 text-muted-foreground">Loading…</div>
+	<div class="max-w-2xl animate-pulse">
+		<div class="mb-5 flex items-center gap-2">
+			<div class="h-5 w-5 rounded bg-secondary"></div>
+			<div class="h-6 w-24 rounded bg-secondary"></div>
+		</div>
+
+		<div class="space-y-5">
+			<div>
+				<div class="mb-1.5 h-4 w-28 rounded bg-secondary"></div>
+				<div class="h-9 w-full rounded-md border border-border bg-card"></div>
+			</div>
+			<div>
+				<div class="mb-1.5 h-4 w-36 rounded bg-secondary"></div>
+				<div class="h-9 w-full rounded-md border border-border bg-card"></div>
+			</div>
+			<div>
+				<div class="mb-1.5 h-4 w-32 rounded bg-secondary"></div>
+				<div class="h-9 w-full rounded-md border border-border bg-card"></div>
+			</div>
+			<div>
+				<div class="mb-1.5 h-4 w-28 rounded bg-secondary"></div>
+				<div class="h-9 w-48 rounded-md border border-border bg-card"></div>
+			</div>
+			<div class="flex justify-end">
+				<div class="h-9 w-24 rounded-md bg-secondary"></div>
+			</div>
+		</div>
+
+		<hr class="border-secondary my-8" />
+
+		<div class="rounded-md border border-red-800/40 bg-card p-4">
+			<div class="mb-4 h-4 w-28 rounded bg-secondary"></div>
+			<div class="mb-4 h-24 rounded-md border border-border bg-card"></div>
+			<div class="h-24 rounded-md border border-border bg-card"></div>
+		</div>
+	</div>
 {:else if error && !repo}
 	<div class="rounded-md border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">{error}</div>
 {:else if repo}
@@ -265,8 +300,8 @@
 
 		<hr class="border-secondary my-8" />
 
-		<div class="rounded-md border border-red-800/40 p-4">
-			<h2 class="text-sm font-semibold text-red-400 mb-1 flex items-center gap-2"><AlertTriangle class="h-4 w-4" />Danger Zone</h2>
+		<div>
+			<h2 class="text-base font-semibold text-red-400 mb-3 flex items-center gap-2"><AlertTriangle class="h-4 w-4" />Danger Zone</h2>
 			{#if archiveError}
 				<div class="mb-3 rounded-md border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">{archiveError}</div>
 			{/if}

@@ -77,7 +77,59 @@
 </svelte:head>
 
 {#if loading}
-	<div class="text-center py-12 text-muted-foreground">Loading…</div>
+	<div>
+		<div class="flex items-center justify-between mb-4">
+			<h1 class="text-xl font-semibold text-foreground flex items-center gap-2">
+				<Users class="h-5 w-5 text-muted-foreground" />
+				Members
+			</h1>
+		</div>
+
+		{#if ctx.isOwner}
+			<div class="mb-6 rounded-md border border-border bg-card p-4">
+				<h2 class="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><UserPlus class="h-4 w-4" />Invite a member</h2>
+				<form onsubmit={invite} class="flex gap-2">
+					<input
+						type="text"
+						bind:value={inviteUsername}
+						placeholder="Username"
+						required
+						class="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+					/>
+					<select bind:value={inviteRole} class="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+						<option value="member">Member</option>
+						<option value="owner">Owner</option>
+					</select>
+					<Button variant="brand" size="sm" type="submit" disabled={inviting}>
+						Add
+					</Button>
+				</form>
+			</div>
+		{/if}
+
+		<div class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+			<Crown class="h-3.5 w-3.5 text-yellow-500" /> Owners
+		</div>
+
+		<div class="rounded-md border border-border overflow-hidden">
+			<div class="flex items-center gap-3 px-4 py-3 bg-card border-b border-secondary">
+				<div class="h-9 w-9 rounded-full border border-border bg-secondary/40"></div>
+				<div class="flex-1">
+					<div class="mb-1 h-4 w-40 rounded border border-border bg-secondary/40"></div>
+					<div class="h-3 w-28 rounded border border-border bg-secondary/40"></div>
+				</div>
+				<div class="h-7 w-24 rounded border border-border bg-secondary/40"></div>
+			</div>
+			<div class="flex items-center gap-3 px-4 py-3 bg-card border-b border-secondary">
+				<div class="h-9 w-9 rounded-full border border-border bg-secondary/40"></div>
+				<div class="flex-1">
+					<div class="mb-1 h-4 w-36 rounded border border-border bg-secondary/40"></div>
+					<div class="h-3 w-24 rounded border border-border bg-secondary/40"></div>
+				</div>
+				<div class="h-7 w-24 rounded border border-border bg-secondary/40"></div>
+			</div>
+		</div>
+	</div>
 {:else if error}
 	<div class="rounded-md border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">{error}</div>
 {:else}
