@@ -391,11 +391,11 @@ func (h *UserHandler) GetContributions(c echo.Context) error {
 }
 
 func contributionCacheKey(userID string, includePrivate bool) string {
-	return fmt.Sprintf("cache:user:%d:contrib:%t", userID, includePrivate)
+	return fmt.Sprintf("cache:user:%s:contrib:%t", userID, includePrivate)
 }
 
 func (h *UserHandler) invalidateUserCaches(ctx context.Context, userID string) {
-	_ = h.cache.DeleteByPrefix(ctx, fmt.Sprintf("cache:user:%d:", userID))
+	_ = h.cache.DeleteByPrefix(ctx, fmt.Sprintf("cache:user:%s:", userID))
 }
 
 func cloneContributionCounts(src map[string]int) map[string]int {
@@ -426,10 +426,6 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 		sem := make(chan struct{}, workers)
 
 		for _, repo := range repos {
-			// Repo activity updates timestamps on push; skip stale repos outside window.
-			if repo.UpdatedAt.Before(since) {
-				continue
-			}
 			wg.Add(1)
 			sem <- struct{}{}
 			go func(repo models.Repository) {
@@ -509,7 +505,36 @@ func (h *UserHandler) listContributionRepos(ctx context.Context, user *models.Us
 		repos = append(repos, orgRepos...)
 	}
 
-	return repos, nil
+	// Also include repos where the user is an explicit collaborator.
+	var collaboratorRepos []models.Repository
+	cq := h.db.WithContext(ctx).
+		Model(&models.Repository{}).
+		Joins("JOIN collaborators ON collaborators.repo_id = repositories.id").
+		Where("collaborators.user_id = ?", user.ID).
+		Preload("Owner").
+		Preload("Org")
+	if !includePrivate {
+		cq = cq.Where("repositories.is_private = false")
+	}
+	if err := cq.Find(&collaboratorRepos).Error; err != nil {
+		return nil, err
+	}
+	repos = append(repos, collaboratorRepos...)
+
+	// Deduplicate by repository ID after merging all sources.
+	if len(repos) <= 1 {
+		return repos, nil
+	}
+	seen := make(map[string]struct{}, len(repos))
+	unique := make([]models.Repository, 0, len(repos))
+	for _, repo := range repos {
+		if _, ok := seen[repo.ID]; ok {
+			continue
+		}
+		seen[repo.ID] = struct{}{}
+		unique = append(unique, repo)
+	}
+	return unique, nil
 }
 
 // ExportData returns all personal data stored for the authenticated user (GDPR Art. 20).
@@ -679,13 +704,11 @@ func (h *UserHandler) GetProfileStats(c echo.Context) error {
 	}
 	includePrivate := currentUser != nil && currentUser.Username == username
 
-	// Total public repos
-	var totalRepos int64
-	repoQuery := h.db.WithContext(ctx).Model(&models.Repository{}).Where("owner_id = ?", user.ID)
-	if !includePrivate {
-		repoQuery = repoQuery.Where("is_private = false")
+	activityRepos, err := h.listContributionRepos(ctx, user, includePrivate)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load activity repositories")
 	}
-	repoQuery.Count(&totalRepos)
+	totalRepos := int64(len(activityRepos))
 
 	// Total stars received
 	var totalStars int64
@@ -706,26 +729,22 @@ func (h *UserHandler) GetProfileStats(c echo.Context) error {
 		Where("author_id = ?", user.ID).
 		Count(&totalIssues)
 
-	// Top languages from repos
-	type langCount struct {
-		Language string
-		Cnt      int64
+	// Top languages from all activity repos (personal + org + collaborator repos).
+	languageCounts := make(map[string]int)
+	for _, repo := range activityRepos {
+		if repo.Language == "" {
+			continue
+		}
+		languageCounts[repo.Language]++
 	}
-	var langRows []langCount
-	langQuery := h.db.WithContext(ctx).
-		Model(&models.Repository{}).
-		Select("language, COUNT(*) as cnt").
-		Where("owner_id = ? AND language IS NOT NULL AND language != ''", user.ID)
-	if !includePrivate {
-		langQuery = langQuery.Where("is_private = false")
-	}
-	langQuery.Group("language").Order("cnt DESC").Limit(6).Scan(&langRows)
-
-	topLangs := make([]langStat, 0, len(langRows))
-	for _, r := range langRows {
-		topLangs = append(topLangs, langStat{Name: r.Language, Count: int(r.Cnt)})
+	topLangs := make([]langStat, 0, len(languageCounts))
+	for language, cnt := range languageCounts {
+		topLangs = append(topLangs, langStat{Name: language, Count: cnt})
 	}
 	sort.Slice(topLangs, func(i, j int) bool { return topLangs[i].Count > topLangs[j].Count })
+	if len(topLangs) > 6 {
+		topLangs = topLangs[:6]
+	}
 
 	// Commits in the last year + streak (shared cached aggregation)
 	agg, err := h.getContributionAggregate(ctx, user, includePrivate)
