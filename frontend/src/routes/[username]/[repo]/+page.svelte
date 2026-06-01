@@ -84,6 +84,12 @@
 
 	const { username, repo } = $derived(page.params);
 	const ref = $derived(page.url.searchParams.get('ref') ?? undefined);
+	const requestedDocTab = $derived.by(() => {
+		const raw = page.url.searchParams.get('tab')?.toLowerCase();
+		if (raw === 'license') return 'license';
+		if (raw === 'readme') return 'readme';
+		return null;
+	});
 	const layoutRepo = $derived(layoutCtx?.repo);
 	const starCount = $derived(layoutCtx?.starCount ?? 0);
 	const commitCount = $derived(layoutCtx?.stats?.commits ?? 0);
@@ -137,6 +143,14 @@
 		return name;
 	}
 
+	function setDocTab(tab: 'readme' | 'license') {
+		activeDoc = tab;
+		if (typeof window === 'undefined') return;
+		const url = new URL(window.location.href);
+		url.searchParams.set('tab', tab);
+		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+	}
+
 	async function loadTree() {
 		const seq = ++loadSeq;
 		loading = true;
@@ -173,6 +187,13 @@
 					const name = f.name.toLowerCase();
 					return ['license', 'license.md', 'license.txt', 'license.rst', 'licence', 'copying', 'unlicense'].includes(name);
 				});
+				if (requestedDocTab === 'license' && licenseFile) {
+					activeDoc = 'license';
+				} else if (requestedDocTab === 'readme' && readmeFile) {
+					activeDoc = 'readme';
+				} else {
+					activeDoc = readmeFile ? 'readme' : licenseFile ? 'license' : 'readme';
+				}
 
 				if (readmeFile) {
 					readmeName = readmeFile.name;
@@ -193,9 +214,6 @@
 						.then((blobData) => {
 							if (seq !== loadSeq) return;
 							license = blobData.content;
-							if (!readme) {
-								activeDoc = 'license';
-							}
 						})
 						.catch(() => {});
 				}
@@ -490,6 +508,14 @@
 	const hoveredChartCountLabel = $derived(hoveredChartPoint ? chartCountLabel(activeChartTab, hoveredChartPoint.count) : '');
 	const hoveredChartIndexLabel = $derived(effectiveHoveredChartIndex != null ? `${effectiveHoveredChartIndex + 1} of ${activeChartPoints.length}` : '');
 	const hoveredTooltipLeftPct = $derived(hoveredChartCoord ? Math.max(14, Math.min(86, (hoveredChartCoord.x / CHART_W) * 100)) : 50);
+
+	$effect(() => {
+		if (requestedDocTab === 'license' && licenseName) {
+			activeDoc = 'license';
+		} else if (requestedDocTab === 'readme' && readmeName) {
+			activeDoc = 'readme';
+		}
+	});
 </script>
 
 {#if loading}
@@ -643,7 +669,7 @@
 							<div class="flex items-center gap-1">
 								<button
 									type="button"
-									onclick={() => (activeDoc = 'readme')}
+									onclick={() => setDocTab('readme')}
 									class="rounded-md border px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-secondary"
 									class:bg-secondary={activeDoc === 'readme'}
 									class:border-border={activeDoc === 'readme'}
@@ -655,7 +681,7 @@
 								</button>
 								<button
 									type="button"
-									onclick={() => (activeDoc = 'license')}
+									onclick={() => setDocTab('license')}
 									class="rounded-md border px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-secondary"
 									class:bg-secondary={activeDoc === 'license'}
 									class:border-border={activeDoc === 'license'}
