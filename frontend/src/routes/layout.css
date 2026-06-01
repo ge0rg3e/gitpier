@@ -336,7 +336,12 @@ pre {
 }
 
 .prose a {
-	@apply text-primary no-underline hover:underline;
+	color: #2563eb !important;
+	text-decoration: underline !important;
+}
+
+.prose a:visited {
+	color: #2563eb !important;
 }
 
 .prose table {

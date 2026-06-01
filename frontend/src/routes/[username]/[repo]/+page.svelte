@@ -7,7 +7,7 @@
 	import { resolveRepoTreeIconUrl } from '$lib/icons/fileIcons';
 	import CodeViewer from '$lib/components/CodeViewer.svelte';
 	import { timeAgo, mediaUrl, isValidGitDate, commitAuthorAvatarUrl, commitAuthorHref, commitAuthorInitial, commitAuthorName } from '$lib/utils';
-	import { Folder, File, GitCommit, Clock, Star, Eye, GitFork, Settings2, Link, Activity, Tag, FilePlus } from '@lucide/svelte';
+	import { Folder, File, GitCommit, Clock, Star, Eye, GitFork, Settings2, Link, Activity, Tag, FilePlus, Scale } from '@lucide/svelte';
 	import { renderRepoMarkdownHtml } from '$lib/markdown';
 
 	const layoutCtx = getContext<any>('repoLayout');
@@ -61,6 +61,7 @@
 	let readmeName = $state<string | null>(null);
 	let license = $state<string | null>(null);
 	let licenseName = $state<string | null>(null);
+	let licensePath = $state<string | null>(null);
 	let activeDoc = $state<'readme' | 'license'>('readme');
 	let isEmpty = $state(false);
 	let loading = $state(true);
@@ -120,6 +121,21 @@
 		return trimmed.replace(/^https?:\/\//i, '').replace(/\/$/, '');
 	}
 
+	function detectLicenseDisplayName(name: string | null, content: string | null): string | null {
+		const raw = (content ?? '').trim();
+		if (raw) {
+			const upper = raw.toUpperCase();
+			if (upper.includes('MIT LICENSE')) return 'MIT License';
+			if (upper.includes('APACHE LICENSE') || upper.includes('APACHE-2.0')) return 'Apache License 2.0';
+			if (upper.includes('GNU GENERAL PUBLIC LICENSE') || upper.includes('GPL-3.0')) return 'GNU GPLv3';
+			if (upper.includes('BSD 3-CLAUSE') || upper.includes('REDISTRIBUTION AND USE IN SOURCE AND BINARY FORMS')) return 'BSD 3-Clause License';
+			if (upper.includes('BSD 2-CLAUSE')) return 'BSD 2-Clause License';
+			if (upper.includes('MOZILLA PUBLIC LICENSE') || upper.includes('MPL-2.0')) return 'Mozilla Public License 2.0';
+			if (upper.includes('UNLICENSE')) return 'The Unlicense';
+		}
+		return name;
+	}
+
 	async function loadTree() {
 		const seq = ++loadSeq;
 		loading = true;
@@ -128,6 +144,7 @@
 		readmeName = null;
 		license = null;
 		licenseName = null;
+		licensePath = null;
 		activityPoints = [];
 		loadingActivity = true;
 		starsHistoryPoints = [];
@@ -149,7 +166,11 @@
 			if (!isEmpty) {
 				hydratingFileMeta = true;
 				const readmeFile = files.find((f) => f.type === 'blob' && f.name.toLowerCase().startsWith('readme'));
-				const licenseFile = files.find((f) => f.type === 'blob' && ['license.md', 'license.txt', 'license.rst'].includes(f.name.toLowerCase()));
+				const licenseFile = files.find((f) => {
+					if (f.type !== 'blob') return false;
+					const name = f.name.toLowerCase();
+					return ['license', 'license.md', 'license.txt', 'license.rst', 'licence', 'copying', 'unlicense'].includes(name);
+				});
 
 				if (readmeFile) {
 					readmeName = readmeFile.name;
@@ -164,6 +185,7 @@
 
 				if (licenseFile) {
 					licenseName = licenseFile.name;
+					licensePath = licenseFile.path;
 					void repos
 						.blob(username!, repo!, licenseFile.path, ref)
 						.then((blobData) => {
@@ -327,6 +349,16 @@
 	const showReadme = $derived(activeDoc === 'readme' && !!readme);
 	const showLicense = $derived(activeDoc === 'license' && !!license);
 	const showDocTabs = $derived(!!readme && !!license);
+	const licenseDisplayName = $derived(detectLicenseDisplayName(licenseName, license));
+	const licenseBlobHref = $derived.by(() => {
+		if (!licensePath) return '';
+		const encodedPath = licensePath
+			.split('/')
+			.map((segment) => encodeURIComponent(segment))
+			.join('/');
+		const refQuery = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+		return `/${username}/${repo}/blob/${encodedPath}${refQuery}`;
+	});
 
 	const ACTIVITY_DAYS = 21;
 	const STAR_HISTORY_DAYS = 30;
@@ -682,6 +714,15 @@
 						<Link class="h-4 w-4" />
 						<span class="truncate">{displayWebsite(layoutRepo.website)}</span>
 					</a>
+				{/if}
+
+				{#if licenseName && licenseBlobHref}
+					<div class="mt-2">
+						<a href={licenseBlobHref} class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+							<Scale class="h-4 w-4" />
+							<span class="truncate">{licenseDisplayName ?? licenseName}</span>
+						</a>
+					</div>
 				{/if}
 			</div>
 
