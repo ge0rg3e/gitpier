@@ -68,6 +68,7 @@
 	let error = $state('');
 	let contributors = $state<User[]>([]);
 	let latestRelease = $state<Release | null>(null);
+	let releaseCount = $state<number | null>(null);
 	let languages = $state<{ name: string; bytes: number; percent: number }[]>([]);
 	type ActivityPoint = { date: string; count: number };
 	type ChartTab = 'activity' | 'stars';
@@ -152,6 +153,7 @@
 		hoveredChartIndex = null;
 		hydratingFileMeta = false;
 		invalidFileMetaPaths = new Set();
+		releaseCount = null;
 		activeDoc = 'readme';
 		try {
 			// First paint: fast tree without per-file metadata.
@@ -241,6 +243,17 @@
 					latestRelease = d.release;
 				})
 				.catch(() => {});
+
+			void releases
+				.list(username!, repo!)
+				.then((d) => {
+					if (seq !== loadSeq) return;
+					releaseCount = d.releases?.length ?? 0;
+				})
+				.catch(() => {
+					if (seq !== loadSeq) return;
+					releaseCount = 0;
+				});
 
 			void repos
 				.languages(username!, repo!)
@@ -833,6 +846,9 @@
 				<div class="flex items-center justify-between mb-3">
 					<h2 class="text-sm font-semibold text-foreground">
 						<a href="/{username}/{repo}/releases" class="hover:text-primary transition-colors">Releases</a>
+						{#if releaseCount !== null}
+							<span class="font-normal text-muted-foreground ml-1">{releaseCount}</span>
+						{/if}
 					</h2>
 				</div>
 				{#if latestRelease}
