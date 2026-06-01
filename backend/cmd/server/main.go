@@ -115,10 +115,9 @@ func main() {
 
 	// Anti-spam service
 	antiSpamSvc, err := services.NewAntiSpamService(db, services.AntiSpamConfig{
-		TurnstileSecretKey:    cfg.TurnstileSecretKey,
-		EnableTurnstile:       cfg.EnableTurnstile,
-		EnableDisposableCheck: cfg.EnableDisposableCheck,
-		EnableRateLimiting:    cfg.EnableRateLimiting,
+		TurnstileSecretKey: cfg.TurnstileSecretKey,
+		EnableTurnstile:    cfg.EnableTurnstile,
+		EnableRateLimiting: cfg.EnableRateLimiting,
 	})
 	if err != nil {
 		log.Fatalf("failed to initialize anti-spam service: %v", err)

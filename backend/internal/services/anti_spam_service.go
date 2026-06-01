@@ -12,19 +12,16 @@ import (
 
 	"gitpier/internal/models"
 
-	disposable "github.com/rezmoss/go-is-disposable-email"
 	"gorm.io/gorm"
 )
 
 type AntiSpamService struct {
-	db                    *gorm.DB
-	turnstileSecretKey    string
-	disposableChecker     *disposable.Checker
-	turnstileEndpoint     string
-	httpClient            *http.Client
-	enableTurnstile       bool
-	enableDisposableCheck bool
-	enableRateLimiting    bool
+	db                 *gorm.DB
+	turnstileSecretKey string
+	turnstileEndpoint  string
+	httpClient         *http.Client
+	enableTurnstile    bool
+	enableRateLimiting bool
 }
 
 // TurnstileVerifyRequest is the request sent to Cloudflare Turnstile
@@ -44,32 +41,19 @@ type TurnstileVerifyResponse struct {
 }
 
 type AntiSpamConfig struct {
-	TurnstileSecretKey    string
-	EnableTurnstile       bool
-	EnableDisposableCheck bool
-	EnableRateLimiting    bool
+	TurnstileSecretKey string
+	EnableTurnstile    bool
+	EnableRateLimiting bool
 }
 
 func NewAntiSpamService(db *gorm.DB, config AntiSpamConfig) (*AntiSpamService, error) {
-	// Initialize disposable email checker
-	var checker *disposable.Checker
-	if config.EnableDisposableCheck {
-		var err error
-		checker, err = disposable.New()
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize disposable email checker: %w", err)
-		}
-	}
-
 	return &AntiSpamService{
-		db:                    db,
-		turnstileSecretKey:    config.TurnstileSecretKey,
-		disposableChecker:     checker,
-		turnstileEndpoint:     "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-		httpClient:            &http.Client{Timeout: 10 * time.Second},
-		enableTurnstile:       config.EnableTurnstile,
-		enableDisposableCheck: config.EnableDisposableCheck,
-		enableRateLimiting:    config.EnableRateLimiting,
+		db:                 db,
+		turnstileSecretKey: config.TurnstileSecretKey,
+		turnstileEndpoint:  "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+		httpClient:         &http.Client{Timeout: 10 * time.Second},
+		enableTurnstile:    config.EnableTurnstile,
+		enableRateLimiting: config.EnableRateLimiting,
 	}, nil
 }
 
@@ -122,19 +106,6 @@ func (s *AntiSpamService) VerifyTurnstileToken(ctx context.Context, token string
 			return fmt.Errorf("turnstile verification failed: %s", strings.Join(verifyResp.ErrorCodes, ", "))
 		}
 		return fmt.Errorf("turnstile verification failed")
-	}
-
-	return nil
-}
-
-// CheckDisposableEmail checks if an email is from a disposable email provider
-func (s *AntiSpamService) CheckDisposableEmail(email string) error {
-	if !s.enableDisposableCheck || s.disposableChecker == nil {
-		return nil
-	}
-
-	if s.disposableChecker.IsDisposable(email) {
-		return fmt.Errorf("temporary email addresses are not allowed for registration")
 	}
 
 	return nil
@@ -198,8 +169,5 @@ func (s *AntiSpamService) RecordAccountCreationAttempt(ctx context.Context, ipAd
 
 // Close closes the disposable checker if it was initialized
 func (s *AntiSpamService) Close() error {
-	if s.disposableChecker != nil {
-		return s.disposableChecker.Close()
-	}
 	return nil
 }

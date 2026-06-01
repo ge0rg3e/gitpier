@@ -167,12 +167,6 @@ func (h *AuthHandler) Register(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "CAPTCHA verification failed. Please try again.")
 	}
 
-	// Check for disposable email
-	if err := h.antiSpamSvc.CheckDisposableEmail(req.Email); err != nil {
-		_ = h.antiSpamSvc.RecordAccountCreationAttempt(c.Request().Context(), ip, req.Email, c.Request().UserAgent(), false)
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
 	// Check rate limiting
 	if err := h.antiSpamSvc.CheckAccountCreationRate(c.Request().Context(), ip); err != nil {
 		_ = h.antiSpamSvc.RecordAccountCreationAttempt(c.Request().Context(), ip, req.Email, c.Request().UserAgent(), false)

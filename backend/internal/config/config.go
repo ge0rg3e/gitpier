@@ -47,7 +47,7 @@ type Config struct {
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
 
-	// CORS — comma-separated list of allowed origins
+	// CORS — allowed origins (derived from APP_URL)
 	CORSOrigins []string
 
 	// Workflow runner
@@ -71,8 +71,7 @@ type Config struct {
 	EnableTurnstile    bool
 
 	// Security: Anti-spam
-	EnableDisposableCheck bool
-	EnableRateLimiting    bool
+	EnableRateLimiting bool
 
 	// Repository creation policy
 	RestrictRepoCreation   bool
@@ -97,7 +96,7 @@ func Load() (*Config, error) {
 		SSHPort:                   getEnv("SSH_PORT", "2222"),
 		AppURL:                    getEnv("APP_URL", "http://localhost:8080"),
 		DatabaseURL:               getEnv("DATABASE_URL", ""),
-		RedisURL:                  getEnvOrEmpty("REDIS_URL", ""),
+		RedisURL:                  getEnvOrEmpty("REDIS_URL", "redis://redis:6379/0"),
 		JWTSecret:                 getEnv("JWT_SECRET", ""),
 		GitIdentityName:           getEnv("GIT_IDENTITY_NAME", "GitPier"),
 		GitIdentityEmail:          getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
@@ -117,17 +116,17 @@ func Load() (*Config, error) {
 		DBMaxOpenConns:           getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:           getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeMinutes: getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
-		CORSOrigins:              parseCORSOrigins(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")),
+		CORSOrigins:              []string{getEnv("APP_URL", "http://localhost:8080")},
 
-		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://docker:2375"),
-		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier-runner:latest"),
+		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://dind:2375"),
+		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier/action-runner:latest"),
 		WorkflowMinutesLimitPerMonth:     getEnvInt("WORKFLOW_MINUTES_LIMIT_PER_MONTH", 5000),
 		WorkflowMaxConcurrentRuns:        getEnvInt("WORKFLOW_MAX_CONCURRENT_RUNS", 3),
 		WorkflowContainerMemory:          getEnv("WORKFLOW_CONTAINER_MEMORY", "500m"),
 		WorkflowContainerCPUs:            getEnv("WORKFLOW_CONTAINER_CPUS", "0.5"),
 		WorkflowContainerNetworkMode:     normalizeWorkflowContainerNetworkMode(getEnvOrEmpty("WORKFLOW_CONTAINER_NETWORK_MODE", "bridge")),
 		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", "/data/workflow-workspaces"),
-		WorkflowAllowDockerSocket:        getEnvOrEmpty("WORKFLOW_ALLOW_DOCKER_SOCKET", "false") == "true",
+		WorkflowAllowDockerSocket:        getEnvOrEmpty("WORKFLOW_ALLOW_DOCKER_SOCKET", "true") == "true",
 		WorkflowContainerPidsLimit:       getEnvInt("WORKFLOW_CONTAINER_PIDS_LIMIT", 256),
 		WorkflowContainerReadOnlyRootfs:  getEnvOrEmpty("WORKFLOW_CONTAINER_READONLY_ROOTFS", "true") == "true",
 		WorkflowContainerNoNewPrivileges: getEnvOrEmpty("WORKFLOW_CONTAINER_NO_NEW_PRIVILEGES", "true") == "true",
@@ -137,8 +136,7 @@ func Load() (*Config, error) {
 		TurnstileSiteKey:   getEnvOrEmpty("TURNSTILE_SITE_KEY", "1x00000000000000000000AA"),              // Disabled by default
 		EnableTurnstile:    getEnvOrEmpty("ENABLE_TURNSTILE", "false") == "true",
 
-		EnableDisposableCheck: getEnvOrEmpty("ENABLE_DISPOSABLE_EMAIL_CHECK", "true") == "true",
-		EnableRateLimiting:    getEnvOrEmpty("ENABLE_RATE_LIMITING", "true") == "true",
+		EnableRateLimiting: getEnvOrEmpty("ENABLE_RATE_LIMITING", "true") == "true",
 
 		RestrictRepoCreation: getEnvOrEmpty("RESTRICT_REPO_CREATION", "false") == "true",
 		RepoCreationAllowUsers: parseNormalizedUsernames(
@@ -226,17 +224,6 @@ func getEnvInt64(key string, defaultVal int64) int64 {
 		}
 	}
 	return defaultVal
-}
-
-func parseCORSOrigins(s string) []string {
-	parts := strings.Split(s, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if t := strings.TrimSpace(p); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 func normalizeWorkflowContainerNetworkMode(mode string) string {

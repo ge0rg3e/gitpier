@@ -21,6 +21,10 @@ Before running the project locally, make sure you have the following installed:
 - PostgreSQL
 - Redis
 
+
+## Self-host on your server
+[See the guide here!](https://docs.gitpier.com/self-hosted/get-started)
+
 ## Getting Started
 
 ### Frontend
