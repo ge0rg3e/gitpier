@@ -57,7 +57,7 @@
 					}`}
 				>
 					<KeyRound class="h-3.5 w-3.5" />
-					SSH and GPG keys
+					SSH keys
 				</a>
 				<a
 					href="/settings/privacy"
@@ -120,6 +120,5 @@
 				</a>
 			</nav>
 		</section>
-
 	</div>
 </aside>

@@ -69,7 +69,7 @@
 </script>
 
 <svelte:head>
-	<title>SSH and GPG keys</title>
+	<title>SSH keys</title>
 </svelte:head>
 
 <div class="max-w-3xl">
