@@ -126,6 +126,7 @@ func main() {
 
 	// Handlers
 	handlers.ConfigurePublicBaseURL(cfg.AppURL)
+	handlers.ConfigureMediaBaseURL(cfg.APIURL)
 	authHandler := handlers.NewAuthHandler(authSvc, antiSpamSvc, cfg.AppURL, cfg)
 	userHandler := handlers.NewUserHandler(authSvc, followSvc, repoSvc, gitSvc, workflowSvc, db, cacheStore)
 	repoHandler := handlers.NewRepoHandler(repoSvc, gitSvc, orgSvc, authSvc, cacheStore, cfg)

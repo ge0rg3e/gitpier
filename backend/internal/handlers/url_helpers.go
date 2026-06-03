@@ -8,11 +8,18 @@ import (
 )
 
 var configuredPublicBaseURL string
+var configuredMediaBaseURL string
 
 // ConfigurePublicBaseURL sets the canonical external base URL used in responses.
 // Expected format: scheme://host[:port], usually sourced from APP_URL.
 func ConfigurePublicBaseURL(raw string) {
 	configuredPublicBaseURL = normalizePublicBaseURL(raw)
+}
+
+// ConfigureMediaBaseURL sets the canonical external base URL for media links
+// such as avatars. This should point at the API origin, not the app origin.
+func ConfigureMediaBaseURL(raw string) {
+	configuredMediaBaseURL = normalizePublicBaseURL(raw)
 }
 
 func normalizePublicBaseURL(raw string) string {
@@ -43,6 +50,24 @@ func publicHost(c echo.Context) string {
 	return c.Request().Host
 }
 
+func mediaBaseURL(c echo.Context) string {
+	if configuredMediaBaseURL != "" {
+		return configuredMediaBaseURL
+	}
+
+	scheme := c.Scheme()
+	if scheme != "http" && scheme != "https" {
+		scheme = "http"
+	}
+
+	host := strings.TrimSpace(c.Request().Host)
+	if host == "" {
+		return ""
+	}
+
+	return scheme + "://" + host
+}
+
 // toAbsoluteURL returns an absolute URL for path-like values while keeping
 // existing absolute URLs unchanged.
 func toAbsoluteURL(c echo.Context, raw string) string {
@@ -56,7 +81,7 @@ func toAbsoluteURL(c echo.Context, raw string) string {
 	if !strings.HasPrefix(url, "/") {
 		url = "/" + url
 	}
-	base := publicBaseURL(c)
+	base := mediaBaseURL(c)
 	if base == "" {
 		return url
 	}

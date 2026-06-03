@@ -15,6 +15,7 @@ type Config struct {
 	Port    string
 	SSHPort string
 	AppURL  string
+	APIURL  string
 
 	// Database
 	DatabaseURL string
@@ -95,6 +96,7 @@ func Load() (*Config, error) {
 		Port:                      getEnv("PORT", "8080"),
 		SSHPort:                   getEnv("SSH_PORT", "2222"),
 		AppURL:                    getEnv("APP_URL", "http://localhost:8080"),
+		APIURL:                    getEnv("API_URL", ""),
 		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		RedisURL:                  getEnvOrEmpty("REDIS_URL", "redis://redis:6379/0"),
 		JWTSecret:                 getEnv("JWT_SECRET", ""),
