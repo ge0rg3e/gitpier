@@ -40,9 +40,6 @@
 						<img src="/images/logo.png" alt="GitPier" class="h-5 w-5 object-contain opacity-70" />
 						<span>© 2026 GitPier - All rights reserved.</span>
 					</div>
-					<nav class="flex flex-wrap items-center justify-center gap-4">
-						<a href="https://docs.gitpier.com" target="_blank" class="hover:text-foreground transition-colors">Docs</a>
-					</nav>
 				</div>
 			</div>
 		</div>
