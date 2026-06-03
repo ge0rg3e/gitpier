@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -24,6 +25,37 @@ type ReleaseHandler struct {
 
 func NewReleaseHandler(releaseSvc *services.ReleaseService, repoSvc *services.RepoService, gitSvc *services.GitService, workflowSvc *services.WorkflowService) *ReleaseHandler {
 	return &ReleaseHandler{releaseSvc: releaseSvc, repoSvc: repoSvc, gitSvc: gitSvc, workflowSvc: workflowSvc}
+}
+
+func (h *ReleaseHandler) triggerPublishedReleaseWorkflow(ctx context.Context, repo *models.Repository, tagName string) {
+	if h.workflowSvc == nil || strings.TrimSpace(tagName) == "" {
+		return
+	}
+
+	namespace := repo.Owner.Username
+	if repo.OrgID != nil && repo.Org != nil {
+		namespace = repo.Org.Login
+	}
+	repoPath := h.repoSvc.RepoPath(namespace, repo.Name)
+
+	commit, commitErr := h.gitSvc.GetHeadCommit(repoPath, tagName)
+	if commitErr != nil {
+		log.Printf("release workflow trigger skipped (tag resolve failed): %v", commitErr)
+		return
+	}
+
+	if err := h.workflowSvc.TriggerWorkflows(
+		ctx,
+		repo.ID,
+		namespace,
+		repo.Name,
+		"release",
+		tagName,
+		commit.SHA,
+		"published",
+	); err != nil {
+		log.Printf("release workflow trigger error: %v", err)
+	}
 }
 
 // resolveRepo is a small helper that fetches the repo and checks read access.
@@ -194,22 +226,8 @@ func (h *ReleaseHandler) Create(c echo.Context) error {
 		}
 	}
 
-	if h.workflowSvc != nil {
-		commit, commitErr := h.gitSvc.GetHeadCommit(repoPath, r.TagName)
-		if commitErr != nil {
-			log.Printf("release workflow trigger skipped (tag resolve failed): %v", commitErr)
-		} else if err := h.workflowSvc.TriggerWorkflows(
-			c.Request().Context(),
-			repo.ID,
-			namespace,
-			repo.Name,
-			"release",
-			r.TagName,
-			commit.SHA,
-			"created",
-		); err != nil {
-			log.Printf("release workflow trigger error: %v", err)
-		}
+	if !r.IsDraft {
+		h.triggerPublishedReleaseWorkflow(c.Request().Context(), repo, r.TagName)
 	}
 	return c.JSON(http.StatusCreated, map[string]interface{}{"release": r})
 }
@@ -239,6 +257,14 @@ func (h *ReleaseHandler) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
+	existingRelease, err := h.releaseSvc.Get(c.Request().Context(), repo.ID, id)
+	if errors.Is(err, services.ErrReleaseNotFound) {
+		return echo.NewHTTPError(http.StatusNotFound, "release not found")
+	}
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch release")
+	}
+
 	r, err := h.releaseSvc.Update(c.Request().Context(), repo.ID, id, services.UpdateReleaseInput{
 		Name:         req.Name,
 		Body:         req.Body,
@@ -251,6 +277,11 @@ func (h *ReleaseHandler) Update(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
+
+	if existingRelease.IsDraft && !r.IsDraft {
+		h.triggerPublishedReleaseWorkflow(c.Request().Context(), repo, r.TagName)
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{"release": r})
 }
 
