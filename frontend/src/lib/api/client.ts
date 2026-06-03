@@ -1856,25 +1856,3 @@ export const adminSystem = {
 			headers: { 'X-System-Admin-Password': password }
 		})
 };
-
-export interface FeedbackEntry {
-	id: number;
-	category: 'bug' | 'feature' | 'other';
-	message: string;
-	status: 'new' | 'in_review' | 'implemented' | 'dismissed';
-	admin_note: string;
-	user_id?: number;
-	user?: User;
-	reviewed_by_user_id?: number;
-	reviewed_at?: string;
-	created_at: string;
-	updated_at: string;
-}
-
-export const feedback = {
-	submit: (category: 'bug' | 'feature' | 'other', message: string) =>
-		request<{ feedback: FeedbackEntry }>('/feedback', {
-			method: 'POST',
-			body: JSON.stringify({ category, message })
-		})
-};

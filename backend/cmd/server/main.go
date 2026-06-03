@@ -148,7 +148,6 @@ func main() {
 	oauthAppHandler := handlers.NewOAuthAppHandler(oauthAppSvc, orgSvc)
 	oauthFlowHandler := handlers.NewOAuthFlowHandler(oauthFlowSvc, oauthAppSvc)
 	gitlodeAppHandler := handlers.NewAppHandler(gitlodeAppSvc, orgSvc)
-	feedbackHandler := handlers.NewFeedbackHandler(db)
 	adminSystemHandler := handlers.NewAdminSystemHandler(db, repoSvc, cfg.AdminSystemPassword)
 	webhookSvc := services.NewWebhookService(db)
 	webhookHandler := handlers.NewWebhookHandler(webhookSvc, repoSvc)
@@ -351,9 +350,6 @@ func main() {
 	api.POST("/auth/2fa/enable", authHandler.TwoFactorEnable, apimiddleware.RequireAuth(authSvc), authRateLimiter)
 	api.POST("/auth/2fa/disable", authHandler.TwoFactorDisable, apimiddleware.RequireAuth(authSvc), authRateLimiter)
 	api.POST("/auth/2fa/recovery-codes/regenerate", authHandler.TwoFactorRegenerateRecoveryCodes, apimiddleware.RequireAuth(authSvc), authRateLimiter)
-
-	// Public feedback (optional auth)
-	api.POST("/feedback", feedbackHandler.Create)
 
 	// Explore
 	api.GET("/explore", repoHandler.Explore)

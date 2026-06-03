@@ -16,7 +16,6 @@
 		Building2,
 		Code,
 		File,
-		MessageSquare,
 		Home,
 		Minus,
 		Square,
@@ -30,10 +29,8 @@
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
-	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { mediaUrl } from '$lib/utils';
-	import { feedback, search, orgs, type Repository, type User as ApiUser, type Organization } from '$lib/api/client';
+	import { search, orgs, type Repository, type User as ApiUser, type Organization } from '$lib/api/client';
 	import { addOrUpdateBrowserTab, browserTabs, closeBrowserTab, reorderBrowserTabs, type BrowserTab, type BrowserTabKind } from '$lib/stores/browser-tabs';
 	import { setBrowserTabsEnabled, uiPreferences } from '$lib/stores/ui-preferences';
 
@@ -482,48 +479,6 @@
 	const hasLiveResults = $derived(liveRepos.length > 0 || liveUsers.length > 0 || liveOrgs.length > 0);
 	const liveSearchTerms = $derived(extractSearchTerms(searchQuery));
 
-	// Feedback dialog
-	let feedbackOpen = $state(false);
-	let feedbackText = $state('');
-	let feedbackCategory = $state<'bug' | 'feature' | 'other'>('bug');
-	let feedbackSent = $state(false);
-	let feedbackLoading = $state(false);
-	let feedbackError = $state('');
-
-	function openFeedback() {
-		feedbackOpen = true;
-		feedbackSent = false;
-		feedbackError = '';
-		feedbackText = '';
-		feedbackCategory = 'bug';
-	}
-
-	function closeFeedback() {
-		feedbackOpen = false;
-	}
-
-	async function submitFeedback(e: Event) {
-		e.preventDefault();
-		if (!feedbackText.trim()) return;
-		feedbackLoading = true;
-		feedbackError = '';
-		try {
-			await feedback.submit(feedbackCategory, feedbackText.trim());
-			feedbackSent = true;
-		} catch (err: any) {
-			feedbackError = err?.message ?? 'Failed to send feedback.';
-		} finally {
-			feedbackLoading = false;
-		}
-	}
-
-	// Listen for open-feedback event from the alpha banner
-	$effect(() => {
-		const handler = () => openFeedback();
-		document.addEventListener('open-feedback', handler);
-		return () => document.removeEventListener('open-feedback', handler);
-	});
-
 	$effect(() => {
 		if (!browser) return;
 		const controls = window.electronWindowControls;
@@ -828,10 +783,6 @@
 								<Settings class="h-3.5 w-3.5" />
 								Settings
 							</a>
-							<button onclick={openFeedback} class="flex w-full items-center gap-2 px-4 py-1.5 text-sm text-foreground hover:bg-brand transition-colors">
-								<MessageSquare class="h-3.5 w-3.5" />
-								Feedback
-							</button>
 
 							<div class="border-t border-secondary my-1"></div>
 
@@ -867,68 +818,6 @@
 		{/if}
 	</div>
 </header>
-
-<!-- Feedback dialog -->
-<Dialog.Root bind:open={feedbackOpen}>
-	<Dialog.Content class="sm:max-w-md">
-		<Dialog.Header>
-			<Dialog.Title>Send feedback</Dialog.Title>
-			<Dialog.Description>GitPier is in alpha. Help us improve by reporting bugs or suggesting features.</Dialog.Description>
-		</Dialog.Header>
-
-		{#if feedbackSent}
-			<div class="flex flex-col items-center gap-3 py-6 text-center">
-				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-500/15">
-					<MessageSquare class="h-6 w-6 text-green-600 dark:text-green-400" />
-				</div>
-				<p class="font-medium text-foreground">Thanks for your feedback!</p>
-				<p class="text-sm text-muted-foreground">We'll review it and use it to improve GitPier.</p>
-				<Button variant="outline" size="sm" onclick={closeFeedback}>Close</Button>
-			</div>
-		{:else}
-			<form onsubmit={submitFeedback} class="flex flex-col gap-4 py-2">
-				{#if feedbackError}
-					<p class="rounded-md border border-red-800/40 bg-red-900/20 px-3 py-2 text-xs text-red-400">{feedbackError}</p>
-				{/if}
-
-				<!-- Category -->
-				<div class="flex gap-2">
-					{#each [['bug', '🐛 Bug report'], ['feature', '✨ Feature request'], ['other', '💬 Other']] as [val, label]}
-						<button
-							type="button"
-							onclick={() => (feedbackCategory = val as typeof feedbackCategory)}
-							class="flex-1 rounded-md border px-2 py-1.5 text-xs transition-colors {feedbackCategory === val
-								? 'border-primary bg-primary/10 text-primary font-medium'
-								: 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'}"
-						>
-							{label}
-						</button>
-					{/each}
-				</div>
-
-				<!-- Message -->
-				<Textarea
-					bind:value={feedbackText}
-					placeholder={feedbackCategory === 'bug'
-						? 'Describe what happened and how to reproduce it…'
-						: feedbackCategory === 'feature'
-							? "Describe the feature you'd like to see…"
-							: 'Share your thoughts…'}
-					rows={5}
-					required
-					class="resize-none"
-				/>
-
-				<Dialog.Footer class="gap-2">
-					<Button type="button" variant="outline" onclick={closeFeedback}>Cancel</Button>
-					<Button type="submit" variant="brand" disabled={feedbackLoading || !feedbackText.trim()}>
-						{feedbackLoading ? 'Sending…' : 'Send feedback'}
-					</Button>
-				</Dialog.Footer>
-			</form>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
 
 <style>
 	.electron-app {
