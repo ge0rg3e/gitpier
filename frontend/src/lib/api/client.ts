@@ -1,6 +1,4 @@
-import { env } from '$env/dynamic/public';
-
-export const API_BASE = env.PUBLIC_API_URL ?? 'http://localhost:8080';
+export const API_BASE = '';
 
 export interface User {
 	id: number;
@@ -675,11 +673,18 @@ export interface DashboardPullRequest extends PullRequest {
 	repo_name: string;
 }
 
+export interface DashboardActivityRepo {
+	owner: string;
+	name: string;
+	updated_at: string;
+}
+
 export interface DashboardOverview {
 	open_pull_requests: number;
 	open_issues: number;
 	review_requests: number;
 	recent_pull_requests: DashboardPullRequest[];
+	recent_activity_repos: DashboardActivityRepo[];
 }
 
 export interface PRComment {

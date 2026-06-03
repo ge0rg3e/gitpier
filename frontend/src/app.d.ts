@@ -11,6 +11,10 @@ declare global {
 
 	interface Window {
 		electronWindowControls?: ElectronWindowControls;
+		__gitpier_config?: {
+			sshCloneHost?: string;
+			turnstileSiteKey?: string;
+		};
 	}
 
 	namespace App {

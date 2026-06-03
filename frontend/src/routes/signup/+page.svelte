@@ -22,9 +22,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { env } from '$env/dynamic/public';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { auth } from '$lib/api/client';
+	import { getPublicRuntimeConfig } from '$lib/runtime-config';
 	import { Eye, EyeOff, Loader } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { onMount } from 'svelte';
@@ -43,7 +43,7 @@
 	let otpExpiresInSeconds = $state(0);
 	let turnstileContainerRef = $state<HTMLDivElement | null>(null);
 	let turnstileReady = $state(false);
-	let turnstileSiteKey = env.PUBLIC_TURNSTILE_SITE_KEY || '';
+	let turnstileSiteKey = getPublicRuntimeConfig().turnstileSiteKey;
 	let usernameAvailable = $state<boolean | null>(null);
 	let checkingUsernameAvailability = $state(false);
 	let usernameAvailabilityMessage = $state('');

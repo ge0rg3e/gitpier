@@ -1803,14 +1803,27 @@ func resolveRef(repo *gogit.Repository, ref string) (*plumbing.Hash, error) {
 }
 
 // GetContributions returns a "YYYY-MM-DD" → commit count map for the given
-// author email across all branches of the repo for commits after `since`.
-func (s *GitService) GetContributions(repoPath, authorEmail string, since time.Time) (map[string]int, error) {
+// author email on the provided refs (or all refs when none are provided) for
+// commits after `since`.
+func (s *GitService) GetContributions(repoPath, authorEmail string, since time.Time, refs ...string) (map[string]int, error) {
 	if strings.TrimSpace(repoPath) == "" || strings.TrimSpace(authorEmail) == "" {
 		return map[string]int{}, nil
 	}
 
 	sinceUTC := since.UTC().Truncate(24 * time.Hour)
-	cacheKey := repoPath + "\x00" + strings.ToLower(strings.TrimSpace(authorEmail)) + "\x00" + sinceUTC.Format("2006-01-02")
+	normalizedRefs := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if _, err := resolveRefHashFast(repoPath, ref); err != nil {
+			continue
+		}
+		normalizedRefs = append(normalizedRefs, ref)
+	}
+	refsKey := strings.Join(normalizedRefs, ",")
+	cacheKey := repoPath + "\x00" + strings.ToLower(strings.TrimSpace(authorEmail)) + "\x00" + sinceUTC.Format("2006-01-02") + "\x00" + refsKey
 	now := time.Now().UTC()
 
 	contributionsCacheMu.RLock()
@@ -1850,7 +1863,13 @@ func (s *GitService) GetContributions(repoPath, authorEmail string, since time.T
 
 	ctx, cancel := context.WithTimeout(context.Background(), contributionsTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "-C", repoPath, "log", "--all", "--since="+sinceUTC.Format(time.RFC3339), "--author="+authorEmail, "--format=%aI").Output()
+	args := []string{"-C", repoPath, "log", "--since=" + sinceUTC.Format(time.RFC3339), "--author=" + authorEmail, "--format=%aI"}
+	if len(normalizedRefs) == 0 {
+		args = append(args, "--all")
+	} else {
+		args = append(args, normalizedRefs...)
+	}
+	out, err := exec.CommandContext(ctx, "git", args...).Output()
 	if err != nil {
 		finish(map[string]int{}, err)
 		return map[string]int{}, nil

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -258,7 +259,7 @@ func main() {
 				h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
 			}
 			h.Set("Content-Security-Policy",
-				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'")
+				"default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; script-src-elem 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'")
 			return next(c)
 		}
 	})
@@ -276,7 +277,20 @@ func main() {
 		Store: middleware.NewRateLimiterMemoryStore(20),
 		Skipper: func(c echo.Context) bool {
 			path := c.Request().URL.Path
-			return strings.HasPrefix(path, "/v2/")
+			if strings.HasPrefix(path, "/v2/") {
+				return true
+			}
+			if strings.HasPrefix(path, "/_app/") {
+				return true
+			}
+			if strings.HasPrefix(path, "/images/") {
+				return true
+			}
+			switch path {
+			case "/app-config.js", "/favicon.ico", "/manifest.webmanifest", "/robots.txt", "/service-worker.js", "/sw.js":
+				return true
+			}
+			return false
 		},
 	}))
 
@@ -706,6 +720,8 @@ func main() {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	registerFrontendRoutes(e, cfg)
+
 	// SSH server
 	sshSrv := sshserver.NewServer(cfg, authSvc, repoSvc, gitSvc)
 	sshSrv.SetWorkflowService(workflowSvc)
@@ -733,6 +749,60 @@ func main() {
 	if err := e.Start(fmt.Sprintf(":%s", cfg.Port)); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func registerFrontendRoutes(e *echo.Echo, cfg *config.Config) {
+	if cfg.FrontendDistPath == "" {
+		log.Printf("frontend dist not configured; skipping frontend asset serving")
+		return
+	}
+
+	indexPath := filepath.Join(cfg.FrontendDistPath, "index.html")
+	if info, err := os.Stat(indexPath); err != nil || info.IsDir() {
+		log.Printf("frontend index missing at %s; skipping frontend asset serving", indexPath)
+		return
+	}
+
+	e.GET("/app-config.js", func(c echo.Context) error {
+		payload, err := json.Marshal(map[string]any{
+			"sshCloneHost": cfg.SSHCloneHost,
+			"turnstileSiteKey": func() string {
+				if cfg.EnableTurnstile {
+					return cfg.TurnstileSiteKey
+				}
+				return ""
+			}(),
+		})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to serialize app config")
+		}
+
+		c.Response().Header().Set(echo.HeaderContentType, "application/javascript; charset=utf-8")
+		c.Response().Header().Set(echo.HeaderCacheControl, "no-store")
+		_, err = c.Response().Write([]byte(fmt.Sprintf("window.__gitpier_config = Object.freeze(%s);\n", payload)))
+		return err
+	})
+
+	spaHandler := func(c echo.Context) error {
+		requestPath := strings.TrimPrefix(path.Clean("/"+c.Param("*")), "/")
+		if requestPath == "" {
+			return c.File(indexPath)
+		}
+
+		resolvedPath := filepath.Join(cfg.FrontendDistPath, filepath.FromSlash(requestPath))
+		if info, err := os.Stat(resolvedPath); err == nil && !info.IsDir() {
+			return c.File(resolvedPath)
+		}
+
+		if path.Ext(requestPath) != "" {
+			return echo.NewHTTPError(http.StatusNotFound, "not found")
+		}
+
+		return c.File(indexPath)
+	}
+
+	e.GET("/*", spaHandler)
+	e.HEAD("/*", spaHandler)
 }
 
 // jsonPayloadGuard mitigates request-body DoS by bounding JSON size and nesting depth.

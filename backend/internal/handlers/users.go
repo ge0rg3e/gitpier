@@ -32,10 +32,10 @@ type UserHandler struct {
 const contributionAggregateTTL = 3 * time.Minute
 
 type contributionAggregate struct {
-	counts        map[string]int
-	total         int
-	currentStreak int
-	longestStreak int
+	Counts        map[string]int `json:"counts"`
+	Total         int            `json:"total"`
+	CurrentStreak int            `json:"current_streak"`
+	LongestStreak int            `json:"longest_streak"`
 }
 
 func NewUserHandler(authSvc *services.AuthService, followSvc *services.FollowService, repoSvc *services.RepoService, gitSvc *services.GitService, workflowSvc *services.WorkflowService, db *gorm.DB, cacheStore cache.Store) *UserHandler {
@@ -46,6 +46,12 @@ type dashboardPullRequest struct {
 	models.PullRequest
 	RepoOwner string `json:"repo_owner"`
 	RepoName  string `json:"repo_name"`
+}
+
+type dashboardRecentRepo struct {
+	Owner     string    `json:"owner"`
+	Name      string    `json:"name"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (h *UserHandler) GetActionsUsage(c echo.Context) error {
@@ -130,12 +136,48 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		})
 	}
 
+	activityRepos, err := h.listContributionRepos(ctx, currentUser, true)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load activity repositories")
+	}
+	recentActivityRepos := buildDashboardRecentActivityRepos(activityRepos, recentLimit)
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"open_pull_requests":   openPullRequests,
-		"open_issues":          openIssues,
-		"review_requests":      reviewRequests,
-		"recent_pull_requests": recent,
+		"open_pull_requests":    openPullRequests,
+		"open_issues":           openIssues,
+		"review_requests":       reviewRequests,
+		"recent_pull_requests":  recent,
+		"recent_activity_repos": recentActivityRepos,
 	})
+}
+
+func buildDashboardRecentActivityRepos(repos []models.Repository, limit int) []dashboardRecentRepo {
+	if limit <= 0 || len(repos) == 0 {
+		return []dashboardRecentRepo{}
+	}
+
+	sorted := append([]models.Repository(nil), repos...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].UpdatedAt.After(sorted[j].UpdatedAt)
+	})
+	if len(sorted) > limit {
+		sorted = sorted[:limit]
+	}
+
+	items := make([]dashboardRecentRepo, 0, len(sorted))
+	for _, repo := range sorted {
+		owner := repo.Owner.Username
+		if repo.Org != nil {
+			owner = repo.Org.Login
+		}
+		items = append(items, dashboardRecentRepo{
+			Owner:     owner,
+			Name:      repo.Name,
+			UpdatedAt: repo.UpdatedAt,
+		})
+	}
+
+	return items
 }
 
 func (h *UserHandler) GetProfile(c echo.Context) error {
@@ -386,13 +428,13 @@ func (h *UserHandler) GetContributions(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"contributions": cloneContributionCounts(agg.counts),
-		"total":         agg.total,
+		"contributions": cloneContributionCounts(agg.Counts),
+		"total":         agg.Total,
 	})
 }
 
 func contributionCacheKey(userID string, includePrivate bool) string {
-	return fmt.Sprintf("cache:user:%s:contrib:%t", userID, includePrivate)
+	return fmt.Sprintf("cache:user:%s:contrib:v3:%t", userID, includePrivate)
 }
 
 func (h *UserHandler) invalidateUserCaches(ctx context.Context, userID string) {
@@ -410,6 +452,102 @@ func cloneContributionCounts(src map[string]int) map[string]int {
 	return dst
 }
 
+func filterGitHubCountedRepos(repos []models.Repository) []models.Repository {
+	if len(repos) == 0 {
+		return repos
+	}
+	filtered := make([]models.Repository, 0, len(repos))
+	for _, repo := range repos {
+		if repo.ForkedFromRepoID != nil {
+			continue
+		}
+		filtered = append(filtered, repo)
+	}
+	return filtered
+}
+
+func contributionRefNames(repo models.Repository) []string {
+	refs := make([]string, 0, 2)
+	if repo.DefaultBranch != "" {
+		refs = append(refs, repo.DefaultBranch)
+	}
+	if repo.DefaultBranch != "gh-pages" {
+		refs = append(refs, "gh-pages")
+	}
+	return refs
+}
+
+func addContributionTimestamps(counts map[string]int, timestamps []time.Time) {
+	for _, ts := range timestamps {
+		day := ts.UTC().Format("2006-01-02")
+		counts[day]++
+	}
+}
+
+func (h *UserHandler) loadIssueContributionTimes(ctx context.Context, userID string, repoIDs []string, since time.Time) ([]time.Time, error) {
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	rows := make([]struct {
+		CreatedAt time.Time
+	}, 0)
+	if err := h.db.WithContext(ctx).
+		Model(&models.Issue{}).
+		Select("created_at").
+		Where("author_id = ? AND repo_id IN ? AND created_at >= ?", userID, repoIDs, since).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	timestamps := make([]time.Time, 0, len(rows))
+	for _, row := range rows {
+		timestamps = append(timestamps, row.CreatedAt)
+	}
+	return timestamps, nil
+}
+
+func (h *UserHandler) loadPRContributionTimes(ctx context.Context, userID string, repoIDs []string, since time.Time) ([]time.Time, error) {
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	rows := make([]struct {
+		CreatedAt time.Time
+	}, 0)
+	if err := h.db.WithContext(ctx).
+		Model(&models.PullRequest{}).
+		Select("created_at").
+		Where("author_id = ? AND repo_id IN ? AND created_at >= ?", userID, repoIDs, since).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	timestamps := make([]time.Time, 0, len(rows))
+	for _, row := range rows {
+		timestamps = append(timestamps, row.CreatedAt)
+	}
+	return timestamps, nil
+}
+
+func (h *UserHandler) loadPRReviewContributionTimes(ctx context.Context, userID string, repoIDs []string, since time.Time) ([]time.Time, error) {
+	if len(repoIDs) == 0 {
+		return nil, nil
+	}
+	rows := make([]struct {
+		CreatedAt time.Time
+	}, 0)
+	if err := h.db.WithContext(ctx).
+		Model(&models.PRReview{}).
+		Select("pr_reviews.created_at").
+		Joins("JOIN pull_requests ON pull_requests.id = pr_reviews.pr_id").
+		Where("pr_reviews.author_id = ? AND pull_requests.repo_id IN ? AND pr_reviews.created_at >= ?", userID, repoIDs, since).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	timestamps := make([]time.Time, 0, len(rows))
+	for _, row := range rows {
+		timestamps = append(timestamps, row.CreatedAt)
+	}
+	return timestamps, nil
+}
+
 func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models.User, includePrivate bool) (contributionAggregate, error) {
 	key := contributionCacheKey(user.ID, includePrivate)
 	now := time.Now().UTC()
@@ -418,6 +556,7 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 		if err != nil {
 			return nil, err
 		}
+		repos = filterGitHubCountedRepos(repos)
 
 		since := now.AddDate(-1, 0, 0)
 		allCounts := make(map[string]int)
@@ -438,7 +577,7 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 					namespace = repo.Org.Login
 				}
 				repoPath := h.repoSvc.RepoPath(namespace, repo.Name)
-				counts, err := h.gitSvc.GetContributions(repoPath, user.Email, since)
+				counts, err := h.gitSvc.GetContributions(repoPath, user.Email, since, contributionRefNames(repo)...)
 				if err != nil {
 					return
 				}
@@ -453,6 +592,20 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 
 		wg.Wait()
 
+		repoIDs := make([]string, 0, len(repos))
+		for _, repo := range repos {
+			repoIDs = append(repoIDs, repo.ID)
+		}
+		if issueTimes, err := h.loadIssueContributionTimes(ctx, user.ID, repoIDs, since); err == nil {
+			addContributionTimestamps(allCounts, issueTimes)
+		}
+		if prTimes, err := h.loadPRContributionTimes(ctx, user.ID, repoIDs, since); err == nil {
+			addContributionTimestamps(allCounts, prTimes)
+		}
+		if reviewTimes, err := h.loadPRReviewContributionTimes(ctx, user.ID, repoIDs, since); err == nil {
+			addContributionTimestamps(allCounts, reviewTimes)
+		}
+
 		total := 0
 		for _, v := range allCounts {
 			total += v
@@ -460,10 +613,10 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 		currentStreak, longestStreak := computeStreaks(allCounts)
 
 		agg := contributionAggregate{
-			counts:        cloneContributionCounts(allCounts),
-			total:         total,
-			currentStreak: currentStreak,
-			longestStreak: longestStreak,
+			Counts:        cloneContributionCounts(allCounts),
+			Total:         total,
+			CurrentStreak: currentStreak,
+			LongestStreak: longestStreak,
 		}
 		return agg, nil
 	})
@@ -474,6 +627,9 @@ func (h *UserHandler) getContributionAggregate(ctx context.Context, user *models
 	var agg contributionAggregate
 	if err := json.Unmarshal(cachedBytes, &agg); err != nil {
 		return contributionAggregate{}, err
+	}
+	if agg.Counts == nil {
+		agg.Counts = map[string]int{}
 	}
 	return agg, nil
 }
@@ -758,10 +914,10 @@ func (h *UserHandler) GetProfileStats(c echo.Context) error {
 		"total_repos":    totalRepos,
 		"total_prs":      totalPRs,
 		"total_issues":   totalIssues,
-		"total_commits":  agg.total,
+		"total_commits":  agg.Total,
 		"top_languages":  topLangs,
-		"current_streak": agg.currentStreak,
-		"longest_streak": agg.longestStreak,
+		"current_streak": agg.CurrentStreak,
+		"longest_streak": agg.LongestStreak,
 	})
 }
 

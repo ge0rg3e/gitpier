@@ -86,7 +86,7 @@
 	const latestTag = $derived(details?.tags?.[0]?.tag ?? 'latest');
 	const lastPublished = $derived(details?.tags?.[0]?.updated_at ? timeAgo(details.tags[0].updated_at) : null);
 	const totalDownloads = $derived(details?.tags?.reduce((sum, t) => sum + (t.pull_count ?? 0), 0) ?? 0);
-	const registryHost = $derived(typeof window !== 'undefined' ? window.location.host : 'localhost:8080');
+	const registryHost = $derived(typeof window !== 'undefined' ? window.location.host : 'localhost:8828');
 	const pullCommand = $derived(details?.pull_command || (details ? `docker pull ${registryHost}/${details.package.namespace}/${details.package.name}:${latestTag}` : ''));
 
 	// Derive real bar heights from per-tag pull counts (last 7 tags)

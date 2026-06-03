@@ -1,11 +1,11 @@
-<script lang="ts">
+	<script lang="ts">
 	import { page } from '$app/state';
-	import { env } from '$env/dynamic/public';
 	import { getContext } from 'svelte';
 	import { repos, releases, type FileEntry, type CommitInfo, type Release, type RepoStarEvent, type User } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { resolveRepoTreeIconUrl } from '$lib/icons/fileIcons';
 	import CodeViewer from '$lib/components/CodeViewer.svelte';
+	import { getPublicRuntimeConfig } from '$lib/runtime-config';
 	import { timeAgo, mediaUrl, isValidGitDate, commitAuthorAvatarUrl, commitAuthorHref, commitAuthorInitial, commitAuthorName } from '$lib/utils';
 	import { Folder, File, GitCommit, Clock, Star, Eye, GitFork, Settings2, Link, Activity, Tag, FilePlus, Scale } from '@lucide/svelte';
 	import { renderRepoMarkdownHtml } from '$lib/markdown';
@@ -95,13 +95,13 @@
 	const commitCount = $derived(layoutCtx?.stats?.commits ?? 0);
 	function resolveSshCloneHost(raw?: string): string {
 		const trimmed = (raw ?? '').trim();
-		if (!trimmed) return 'localhost:2222';
+		if (!trimmed) return 'localhost:2424';
 		return trimmed
 			.replace(/^ssh:\/\//i, '')
 			.replace(/^[^@]+@/, '')
 			.replace(/\/+$/, '');
 	}
-	const sshCloneHost = resolveSshCloneHost(env.PUBLIC_SSH_CLONE_HOST);
+	const sshCloneHost = resolveSshCloneHost(getPublicRuntimeConfig().sshCloneHost);
 	const canAddFile = $derived(authStore.user != null && !/^[0-9a-f]{40}$/i.test(ref ?? '') && !layoutRepo?.is_archived);
 	const addFileHref = $derived(`/${username}/${repo}/new${ref ? `?ref=${ref}` : ''}`);
 	const setupNewRepoCmd = $derived(
@@ -374,9 +374,9 @@
 		...files.filter((f) => f.type === 'blob').sort((a, b) => a.name.localeCompare(b.name))
 	]);
 
-	const renderedReadme = $derived(readme ? renderRepoMarkdownHtml(readme, username, repo, ref) : '');
+	const renderedReadme = $derived(readme ? renderRepoMarkdownHtml(readme, username ?? '', repo ?? '', ref) : '');
 	const isLicenseMarkdown = $derived(licenseName?.toLowerCase().endsWith('.md') ?? false);
-	const renderedLicense = $derived(license ? renderRepoMarkdownHtml(license, username, repo, ref) : '');
+	const renderedLicense = $derived(license ? renderRepoMarkdownHtml(license, username ?? '', repo ?? '', ref) : '');
 	const showReadme = $derived(activeDoc === 'readme' && !!readme);
 	const showLicense = $derived(activeDoc === 'license' && !!license);
 	const showDocTabs = $derived(!!readme && !!license);

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { authStore } from '$lib/stores/auth.svelte';
-	import { dashboard, users, type DashboardPullRequest, type Repository } from '$lib/api/client';
+	import { dashboard, users, type DashboardActivityRepo, type DashboardPullRequest, type Repository } from '$lib/api/client';
 	import { timeAgo } from '$lib/utils';
 	import { GitPullRequest, CircleDot, ListChecks } from '@lucide/svelte';
 	import ContributionGraph from '$lib/components/ContributionGraph.svelte';
@@ -12,6 +12,7 @@
 	let openIssuesCount = $state(0);
 	let reviewRequestsCount = $state(0);
 	let recentPulls = $state<DashboardPullRequest[]>([]);
+	let recentActivityRepos = $state<DashboardActivityRepo[]>([]);
 	let profileRepos = $state<Repository[]>([]);
 	let contributions = $state<Record<string, number>>({});
 
@@ -24,6 +25,7 @@
 		openIssuesCount = 0;
 		reviewRequestsCount = 0;
 		recentPulls = [];
+		recentActivityRepos = [];
 		profileRepos = [];
 		contributions = {};
 
@@ -33,6 +35,7 @@
 			openIssuesCount = data.open_issues ?? 0;
 			reviewRequestsCount = data.review_requests ?? 0;
 			recentPulls = data.recent_pull_requests ?? [];
+			recentActivityRepos = data.recent_activity_repos ?? [];
 
 			const username = authStore.user?.username;
 			if (username) {
@@ -121,7 +124,20 @@
 			});
 		}
 
-		if (repos.length > 0) return repos.slice(0, 8);
+		for (const repo of recentActivityRepos) {
+			if (repos.length >= 8) break;
+			const key = `${repo.owner}/${repo.name}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			repos.push({
+				owner: repo.owner,
+				name: repo.name,
+				updated_at: repo.updated_at,
+				prs: 0
+			});
+		}
+
+		if (repos.length > 0) return repos;
 
 		return [...profileRepos]
 			.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())

@@ -10,6 +10,7 @@
 	const errorDescription = $page.url.searchParams.get('error_description') ?? '';
 
 	let copied = $state(false);
+	const callbackOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8828';
 
 	function copySnippet() {
 		navigator.clipboard.writeText(curlSnippet).then(() => {
@@ -18,7 +19,7 @@
 		});
 	}
 
-	const curlSnippet = `curl -X POST http://localhost:8080/login/oauth/access_token \\
+	const curlSnippet = `curl -X POST ${callbackOrigin}/login/oauth/access_token \\
   -H "Accept: application/json" \\
   -d "client_id=YOUR_CLIENT_ID" \\
   -d "client_secret=YOUR_CLIENT_SECRET" \\

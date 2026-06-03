@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	dockerbuild "github.com/docker/docker/api/types/build"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	dockerimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -272,8 +273,9 @@ func (r *WorkflowRunner) RunJob(
 	return nil
 }
 
-// ensureRunnerImagePulled pulls the configured runner image once per process start.
-// This targets whichever daemon the runner is connected to (e.g. dind).
+// ensureRunnerImagePulled makes the configured runner image available once per process start.
+// It prefers a local image, builds it from the bundled action-runner context when available,
+// and only falls back to pulling from a registry when no local build context exists.
 func (r *WorkflowRunner) ensureRunnerImagePulled(ctx context.Context) error {
 	r.runnerImagePullMu.Lock()
 	defer r.runnerImagePullMu.Unlock()
@@ -285,13 +287,66 @@ func (r *WorkflowRunner) ensureRunnerImagePulled(ctx context.Context) error {
 	if imageRef == "" {
 		return fmt.Errorf("workflow runner image is empty")
 	}
+
+	if _, _, err := r.docker.ImageInspectWithRaw(ctx, imageRef); err == nil {
+		r.runnerImagePulled = true
+		return nil
+	} else if !dockerclient.IsErrNotFound(err) {
+		return fmt.Errorf("inspect workflow runner image %s: %w", imageRef, err)
+	}
+
+	buildContextPath := strings.TrimSpace(r.cfg.WorkflowRunnerBuildContextPath)
+	if buildContextPath != "" {
+		if err := r.buildWorkflowRunnerImage(ctx, buildContextPath, imageRef); err == nil {
+			r.runnerImagePulled = true
+			return nil
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("build local workflow runner image %s from %s: %w", imageRef, buildContextPath, err)
+		}
+	}
+
 	rc, err := r.docker.ImagePull(ctx, imageRef, dockerimage.PullOptions{})
 	if err != nil {
+		if buildContextPath != "" {
+			return fmt.Errorf("pull workflow runner image %s after local build context lookup failed: %w", imageRef, err)
+		}
 		return err
 	}
 	defer rc.Close()
 	_, _ = io.Copy(io.Discard, rc)
 	r.runnerImagePulled = true
+	return nil
+}
+
+func (r *WorkflowRunner) buildWorkflowRunnerImage(ctx context.Context, buildContextPath, imageRef string) error {
+	info, err := os.Stat(buildContextPath)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("build context path is not a directory")
+	}
+	if _, err := os.Stat(filepath.Join(buildContextPath, "Dockerfile")); err != nil {
+		return err
+	}
+
+	tarCtx, err := tarDirectory(buildContextPath)
+	if err != nil {
+		return fmt.Errorf("create build context: %w", err)
+	}
+	defer tarCtx.Close()
+
+	buildResp, err := r.docker.ImageBuild(ctx, tarCtx, dockerbuild.ImageBuildOptions{
+		Dockerfile: "Dockerfile",
+		Tags:       []string{imageRef},
+		Remove:     true,
+	})
+	if err != nil {
+		return err
+	}
+	defer buildResp.Body.Close()
+
+	_, _ = io.Copy(io.Discard, buildResp.Body)
 	return nil
 }
 

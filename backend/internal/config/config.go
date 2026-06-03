@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,10 +14,11 @@ import (
 
 type Config struct {
 	// Server
-	Port    string
-	SSHPort string
-	AppURL  string
-	APIURL  string
+	Port         string
+	SSHPort      string
+	AppURL       string
+	APIURL       string
+	SSHCloneHost string
 
 	// Database
 	DatabaseURL string
@@ -37,6 +40,8 @@ type Config struct {
 	AvatarsPath               string
 	PackagesPath              string
 	MarkdownAssetsPath        string
+	FrontendDistPath          string
+	SecretsFilePath           string
 	RepoPublicSizeLimitBytes  int64
 	RepoPrivateSizeLimitBytes int64
 
@@ -54,6 +59,7 @@ type Config struct {
 	// Workflow runner
 	DockerHost                       string
 	WorkflowRunnerImage              string
+	WorkflowRunnerBuildContextPath   string
 	WorkflowMinutesLimitPerMonth     int
 	WorkflowMaxConcurrentRuns        int
 	WorkflowContainerMemory          string
@@ -93,10 +99,11 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                      getEnv("PORT", "8080"),
-		SSHPort:                   getEnv("SSH_PORT", "2222"),
-		AppURL:                    getEnv("APP_URL", "http://localhost:8080"),
+		Port:                      getEnv("PORT", "8828"),
+		SSHPort:                   getEnv("SSH_PORT", "2424"),
+		AppURL:                    getEnv("APP_URL", "http://localhost:8828"),
 		APIURL:                    getEnv("API_URL", ""),
+		SSHCloneHost:              getEnvOrEmpty("SSH_CLONE_HOST", ""),
 		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		RedisURL:                  getEnvOrEmpty("REDIS_URL", "redis://redis:6379/0"),
 		JWTSecret:                 getEnv("JWT_SECRET", ""),
@@ -108,20 +115,19 @@ func Load() (*Config, error) {
 		AvatarsPath:               getEnv("AVATARS_PATH", "/data/avatars"),
 		PackagesPath:              getEnv("PACKAGES_PATH", "/data/packages"),
 		MarkdownAssetsPath:        getEnv("MARKDOWN_ASSETS_PATH", "/data/markdown-assets"),
+		FrontendDistPath:          getEnvOrEmpty("FRONTEND_DIST_PATH", ""),
+		SecretsFilePath:           getEnv("SECRETS_FILE_PATH", "/data/secrets.json"),
 		RepoPublicSizeLimitBytes:  getEnvInt64("REPO_STORAGE_LIMIT_PUBLIC_MB", 5120) * 1024 * 1024,
 		RepoPrivateSizeLimitBytes: getEnvInt64("REPO_STORAGE_LIMIT_PRIVATE_MB", 5120) * 1024 * 1024,
-
-		// Derive the encryption key from a dedicated env var; fall back to JWT_SECRET so
-		// existing deployments keep working without extra configuration.
-		SecretEncryptionKey: getEnv("SECRET_ENCRYPTION_KEY", getEnv("JWT_SECRET", "")),
 
 		DBMaxOpenConns:           getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:           getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeMinutes: getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
-		CORSOrigins:              []string{getEnv("APP_URL", "http://localhost:8080")},
+		CORSOrigins:              []string{getEnv("APP_URL", "http://localhost:8828")},
 
 		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://dind:2375"),
-		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier/action-runner:latest"),
+		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier-action-runner:latest"),
+		WorkflowRunnerBuildContextPath:   getEnvOrEmpty("WORKFLOW_RUNNER_BUILD_CONTEXT_PATH", ""),
 		WorkflowMinutesLimitPerMonth:     getEnvInt("WORKFLOW_MINUTES_LIMIT_PER_MONTH", 5000),
 		WorkflowMaxConcurrentRuns:        getEnvInt("WORKFLOW_MAX_CONCURRENT_RUNS", 3),
 		WorkflowContainerMemory:          getEnv("WORKFLOW_CONTAINER_MEMORY", "500m"),
@@ -134,9 +140,9 @@ func Load() (*Config, error) {
 		WorkflowContainerNoNewPrivileges: getEnvOrEmpty("WORKFLOW_CONTAINER_NO_NEW_PRIVILEGES", "true") == "true",
 		WorkflowContainerDropAllCaps:     getEnvOrEmpty("WORKFLOW_CONTAINER_DROP_ALL_CAPS", "true") == "true",
 
-		TurnstileSecretKey: getEnvOrEmpty("TURNSTILE_SECRET_KEY", "1x0000000000000000000000000000000AA"), // Disabled by default
-		TurnstileSiteKey:   getEnvOrEmpty("TURNSTILE_SITE_KEY", "1x00000000000000000000AA"),              // Disabled by default
-		EnableTurnstile:    getEnvOrEmpty("ENABLE_TURNSTILE", "false") == "true",
+		TurnstileSecretKey: getEnvOrEmpty("TURNSTILE_SECRET_KEY", ""),
+		TurnstileSiteKey:   getEnvOrEmpty("TURNSTILE_SITE_KEY", ""),
+		EnableTurnstile:    false,
 
 		EnableRateLimiting: getEnvOrEmpty("ENABLE_RATE_LIMITING", "true") == "true",
 
@@ -170,12 +176,44 @@ func Load() (*Config, error) {
 	if p, err := filepath.Abs(cfg.MarkdownAssetsPath); err == nil {
 		cfg.MarkdownAssetsPath = p
 	}
+	if p, err := filepath.Abs(cfg.SecretsFilePath); err == nil {
+		cfg.SecretsFilePath = p
+	}
+	if cfg.FrontendDistPath == "" {
+		cfg.FrontendDistPath = resolveFrontendDistPath("frontend/build", "../frontend/build")
+	}
+	if cfg.FrontendDistPath != "" {
+		if p, err := filepath.Abs(cfg.FrontendDistPath); err == nil {
+			cfg.FrontendDistPath = p
+		}
+	}
+	if cfg.WorkflowRunnerBuildContextPath == "" {
+		cfg.WorkflowRunnerBuildContextPath = resolveExistingDir("action-runner", "../action-runner", "/app/action-runner")
+	}
+	if cfg.WorkflowRunnerBuildContextPath != "" {
+		if p, err := filepath.Abs(cfg.WorkflowRunnerBuildContextPath); err == nil {
+			cfg.WorkflowRunnerBuildContextPath = p
+		}
+	}
+	if cfg.SSHCloneHost == "" {
+		cfg.SSHCloneHost = deriveSSHCloneHost(cfg.AppURL, cfg.SSHPort)
+	}
+	cfg.EnableTurnstile = isTurnstileConfigured(cfg.TurnstileSecretKey, cfg.TurnstileSiteKey)
+
+	managed, err := loadOrInitManagedSecrets(cfg.SecretsFilePath, managedSecretsOverrides{
+		JWTSecret:           getEnvOrEmpty("JWT_SECRET", ""),
+		SecretEncryptionKey: getEnvOrEmpty("SECRET_ENCRYPTION_KEY", ""),
+		AdminSystemPassword: getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	cfg.JWTSecret = managed.JWTSecret
+	cfg.SecretEncryptionKey = managed.SecretEncryptionKey
+	cfg.AdminSystemPassword = managed.AdminSystemPassword
 
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
-	}
-	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
 	return cfg, nil
@@ -255,4 +293,56 @@ func parseNormalizedUsernames(s string) []string {
 		out = append(out, username)
 	}
 	return out
+}
+
+func resolveExistingDir(candidates ...string) string {
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		info, err := os.Stat(candidate)
+		if err == nil && info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func resolveFrontendDistPath(candidates ...string) string {
+	return resolveExistingDir(candidates...)
+}
+
+func deriveSSHCloneHost(appURL, sshPort string) string {
+	trimmedURL := strings.TrimSpace(appURL)
+	hostname := "localhost"
+
+	if parsed, err := url.Parse(trimmedURL); err == nil {
+		if parsed.Hostname() != "" {
+			hostname = parsed.Hostname()
+		}
+	}
+
+	if sshPort == "" || sshPort == "22" {
+		return hostname
+	}
+
+	return net.JoinHostPort(hostname, sshPort)
+}
+
+func isTurnstileConfigured(secretKey, siteKey string) bool {
+	return isRealTurnstileKey(secretKey) && isRealTurnstileKey(siteKey)
+}
+
+func isRealTurnstileKey(key string) bool {
+	trimmed := strings.TrimSpace(key)
+	if trimmed == "" {
+		return false
+	}
+	switch trimmed {
+	case "1x0000000000000000000000000000000AA", "1x00000000000000000000AA":
+		return false
+	default:
+		return true
+	}
 }

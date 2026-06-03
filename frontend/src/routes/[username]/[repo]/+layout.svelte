@@ -1,14 +1,14 @@
-<script lang="ts">
+	<script lang="ts">
 	import { page } from '$app/state';
-	import { env } from '$env/dynamic/public';
 	import { onMount, setContext } from 'svelte';
 	import { repos, orgs, type Repository, type CommitInfo } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { goto } from '$app/navigation';
+	import { getPublicRuntimeConfig } from '$lib/runtime-config';
 	import { Code, Lock, Globe, ChevronDown, Check, Star, GitBranch, GitFork, Copy, CheckCheck, BookOpen, Tag, Download, Settings } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 
-	let { children, data } = $props();
+	let { children } = $props();
 
 	let repo = $state<Repository | null>(null);
 	let branches = $state<string[]>([]);
@@ -71,12 +71,12 @@
 	const isEmptyRepo = $derived(branches.length === 0 && !headCommit);
 	const { username, repo: repoName } = $derived(page.params);
 	const currentPath = $derived(page.url.pathname);
-	const seoOwner = $derived(repo?.org?.login ?? repo?.owner?.username ?? data?.seo?.owner ?? username ?? '');
-	const seoRepo = $derived(repo?.name ?? data?.seo?.repo ?? repoName ?? '');
-	const seoDescription = $derived(repo?.description?.trim() || data?.seo?.description?.trim() || 'Source code, issues, commits, pull requests, and releases on GitPier.');
+	const seoOwner = $derived(repo?.org?.login ?? repo?.owner?.username ?? username ?? '');
+	const seoRepo = $derived(repo?.name ?? repoName ?? '');
+	const seoDescription = $derived(repo?.description?.trim() || 'Source code, issues, commits, pull requests, and releases on GitPier.');
 	const seoTitle = $derived(`${seoOwner}/${seoRepo}`);
 	const canonicalUrl = $derived(`${page.url.origin}${page.url.pathname}`);
-	const ogImageUrl = $derived(`${page.url.origin}/og/repo/${encodeURIComponent(seoOwner)}/${encodeURIComponent(seoRepo)}?v=${repo?.updated_at ?? '1'}`);
+	const ogImageUrl = $derived(`${page.url.origin}/images/logo.png`);
 
 	async function refreshStats(ref?: string, attempt = 0) {
 		try {
@@ -168,14 +168,14 @@
 
 	function resolveSshCloneHost(raw?: string): string {
 		const trimmed = (raw ?? '').trim();
-		if (!trimmed) return 'localhost:2222';
+		if (!trimmed) return 'localhost:2424';
 		return trimmed
 			.replace(/^ssh:\/\//i, '')
 			.replace(/^[^@]+@/, '')
 			.replace(/\/+$/, '');
 	}
 
-	const sshCloneHost = resolveSshCloneHost(env.PUBLIC_SSH_CLONE_HOST);
+	const sshCloneHost = resolveSshCloneHost(getPublicRuntimeConfig().sshCloneHost);
 	const cloneUrlSSH = $derived(repo ? `ssh://git@${sshCloneHost}/${username}/${repo.name}.git` : '');
 
 	async function copyCloneUrl() {
