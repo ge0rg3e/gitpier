@@ -18,14 +18,13 @@ jobs:
           set -eu
           VERSION="${GITHUB_REF_NAME:-}"
           if [ -z "$VERSION" ]; then
-            echo "GITHUB_REF_NAME is empty; cannot determine release tag version."
-            exit 1
-          fi
-          VERSION="${VERSION#v}"
-          VERSION="${VERSION#V}"
-          if [ -z "$VERSION" ]; then
-            echo "Release tag must contain a version after optional v/V prefix."
-            exit 1
+            VERSION="latest"
+          else
+            VERSION="${VERSION#v}"
+            VERSION="${VERSION#V}"
+            if [ -z "$VERSION" ]; then
+              VERSION="latest"
+            fi
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
@@ -43,24 +42,42 @@ jobs:
           set -eu
           VERSION_IMAGE="gitpier/backend:${VERSION}"
           LATEST_IMAGE="gitpier/backend:latest"
-          docker build -f backend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" backend
+          if [ "$VERSION" = "latest" ]; then
+            docker build -f backend/Dockerfile -t "$LATEST_IMAGE" backend
+          else
+            docker build -f backend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" backend
+          fi
           docker push "$VERSION_IMAGE"
-          docker push "$LATEST_IMAGE"
+          if [ "$VERSION" != "latest" ]; then
+            docker push "$LATEST_IMAGE"
+          fi
 
       - name: Build and push frontend image
         run: |
           set -eu
           VERSION_IMAGE="gitpier/frontend:${VERSION}"
           LATEST_IMAGE="gitpier/frontend:latest"
-          docker build -f frontend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" frontend
+          if [ "$VERSION" = "latest" ]; then
+            docker build -f frontend/Dockerfile -t "$LATEST_IMAGE" frontend
+          else
+            docker build -f frontend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" frontend
+          fi
           docker push "$VERSION_IMAGE"
-          docker push "$LATEST_IMAGE"
+          if [ "$VERSION" != "latest" ]; then
+            docker push "$LATEST_IMAGE"
+          fi
 
       - name: Build and push action-runner image
         run: |
           set -eu
           VERSION_IMAGE="gitpier/action-runner:${VERSION}"
           LATEST_IMAGE="gitpier/action-runner:latest"
-          docker build -f action-runner/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" action-runner
+          if [ "$VERSION" = "latest" ]; then
+            docker build -f action-runner/Dockerfile -t "$LATEST_IMAGE" action-runner
+          else
+            docker build -f action-runner/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" action-runner
+          fi
           docker push "$VERSION_IMAGE"
-          docker push "$LATEST_IMAGE"
+          if [ "$VERSION" != "latest" ]; then
+            docker push "$LATEST_IMAGE"
+          fi
