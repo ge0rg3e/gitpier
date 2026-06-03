@@ -164,7 +164,7 @@ func (h *WorkflowHandler) DispatchRun(c echo.Context) error {
 	return c.JSON(http.StatusAccepted, map[string]interface{}{"runs_created": count})
 }
 
-// ListDispatchable returns workflow files that have a workflow_dispatch trigger at the given ref.
+// ListDispatchable returns workflow definitions available at the given ref.
 // GET /repos/:username/:repo/actions/dispatchable?ref=<branch>
 func (h *WorkflowHandler) ListDispatchable(c echo.Context) error {
 	username := c.Param("username")
@@ -179,17 +179,32 @@ func (h *WorkflowHandler) ListDispatchable(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "repository not found")
 	}
 
-	currentUser, ok := c.Get("user").(*models.User)
-	if !ok || currentUser == nil || !h.repoSvc.HasAccess(repo, currentUser.ID, true) {
-		return echo.NewHTTPError(http.StatusForbidden, "access denied")
+	// Public repos can expose workflow definitions for the Actions UI.
+	// Dispatch permissions are determined separately and reflected in the response.
+	canDispatch := false
+	if repo.IsPrivate {
+		currentUser, ok := c.Get("user").(*models.User)
+		if !ok || currentUser == nil || !h.repoSvc.HasAccess(repo, currentUser.ID, false) {
+			return echo.NewHTTPError(http.StatusUnauthorized, "authentication required")
+		}
+		canDispatch = h.repoSvc.HasAccess(repo, currentUser.ID, true)
+	} else {
+		currentUser, ok := c.Get("user").(*models.User)
+		if ok && currentUser != nil {
+			canDispatch = h.repoSvc.HasAccess(repo, currentUser.ID, true)
+		}
 	}
 
-	paths, err := h.workflowSvc.ListDispatchableWorkflows(username, repoName, ref)
+	workflows, err := h.workflowSvc.ListDispatchableWorkflows(username, repoName, ref)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list workflows")
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{"workflows": paths})
+	for i := range workflows {
+		workflows[i].CanDispatch = canDispatch
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{"workflows": workflows})
 }
 
 // RerunWorkflow re-runs an existing workflow run.

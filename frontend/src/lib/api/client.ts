@@ -75,6 +75,7 @@ export interface Repository {
 	star_count?: number;
 	fork_count?: number;
 	language?: string;
+	activity_series?: number[];
 }
 
 export interface Star {
@@ -839,6 +840,13 @@ export interface WorkflowRun {
 	jobs?: WorkflowJob[];
 }
 
+export interface WorkflowDefinition {
+	name: string;
+	path: string;
+	can_dispatch: boolean;
+	supports_manual: boolean;
+}
+
 export interface ActionsUsage {
 	used_minutes: number;
 	limit_minutes: number;
@@ -860,7 +868,7 @@ export const workflows = {
 
 	usage: (username: string, repo: string) => request<ActionsUsage>(`/repos/${username}/${repo}/actions/usage`),
 
-	listDispatchable: (username: string, repo: string, ref: string) => request<{ workflows: string[] }>(`/repos/${username}/${repo}/actions/dispatchable?ref=${encodeURIComponent(ref)}`),
+	listDispatchable: (username: string, repo: string, ref: string) => request<{ workflows: WorkflowDefinition[] }>(`/repos/${username}/${repo}/actions/dispatchable?ref=${encodeURIComponent(ref)}`),
 
 	dispatch: (username: string, repo: string, ref: string, workflowFile: string) =>
 		request<{ runs_created: number }>(`/repos/${username}/${repo}/actions/dispatch`, { method: 'POST', body: JSON.stringify({ ref, workflow_file: workflowFile }) })

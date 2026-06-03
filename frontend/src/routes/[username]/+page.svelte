@@ -16,6 +16,7 @@
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import SearchSelect from '$lib/components/SearchSelect.svelte';
 	import ContributionGraph from '$lib/components/ContributionGraph.svelte';
+	import RepoActivitySparkline from '$lib/components/RepoActivitySparkline.svelte';
 
 	const userProfileCtx = getContext<{
 		profile: any;
@@ -484,268 +485,279 @@
 			</div>
 
 			<div class="mt-3 flex flex-col gap-3 pb-8">
-				<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h1 class="text-2xl font-semibold tracking-tight">{userProfileCtx.profile.display_name || userProfileCtx.profile.username}</h1>
-					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-muted-foreground">
-						<span>@{userProfileCtx.profile.username}</span>
-						<span class="text-border">.</span>
-						<span class="text-sm">
-							Joined {new Date(userProfileCtx.profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-						</span>
+					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+						<h1 class="text-2xl font-semibold tracking-tight">{userProfileCtx.profile.display_name || userProfileCtx.profile.username}</h1>
+						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-muted-foreground">
+							<span>@{userProfileCtx.profile.username}</span>
+							<span class="text-border">.</span>
+							<span class="text-sm">
+								Joined {new Date(userProfileCtx.profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+							</span>
+						</div>
 					</div>
-				</div>
 
-				{#if userProfileCtx.profile.bio}
-					<p class="max-w-lg text-sm leading-relaxed">{userProfileCtx.profile.bio}</p>
-				{/if}
-
-				<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-					{#if userProfileCtx.profile.location}
-						<span class="flex items-center gap-1.5"><MapPin class="h-3.5 w-3.5" />{userProfileCtx.profile.location}</span>
+					{#if userProfileCtx.profile.bio}
+						<p class="max-w-lg text-sm leading-relaxed">{userProfileCtx.profile.bio}</p>
 					{/if}
-					{#if userProfileCtx.profile.website}
-						<a
-							href={userProfileCtx.profile.website.startsWith('http') ? userProfileCtx.profile.website : `https://${userProfileCtx.profile.website}`}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="flex items-center gap-1.5 transition-colors hover:text-foreground"
+
+					<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+						{#if userProfileCtx.profile.location}
+							<span class="flex items-center gap-1.5"><MapPin class="h-3.5 w-3.5" />{userProfileCtx.profile.location}</span>
+						{/if}
+						{#if userProfileCtx.profile.website}
+							<a
+								href={userProfileCtx.profile.website.startsWith('http') ? userProfileCtx.profile.website : `https://${userProfileCtx.profile.website}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="flex items-center gap-1.5 transition-colors hover:text-foreground"
+							>
+								<Link class="h-3.5 w-3.5" />
+								{userProfileCtx.profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+							</a>
+						{/if}
+					</div>
+
+					<div class="flex items-center gap-4 text-sm">
+						<button
+							type="button"
+							class="flex cursor-pointer items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground hover:underline"
+							onclick={userProfileCtx.openFollowersDialog}
 						>
-							<Link class="h-3.5 w-3.5" />
-							{userProfileCtx.profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-						</a>
-					{/if}
-				</div>
-
-				<div class="flex items-center gap-4 text-sm">
-					<button
-						type="button"
-						class="flex cursor-pointer items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground hover:underline"
-						onclick={userProfileCtx.openFollowersDialog}
-					>
-						<Users class="h-3.5 w-3.5" />
-						<span class="font-semibold text-foreground">{formatCountShort(userProfileCtx.followerCount)}</span>
-						<span>{userProfileCtx.followerCount === 1 ? 'follower' : 'followers'}</span>
-					</button>
-					<span class="text-border">.</span>
-					<button type="button" class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground hover:underline" onclick={userProfileCtx.openFollowingDialog}>
-						<span class="font-semibold text-foreground">{formatCountShort(userProfileCtx.followingCount)}</span> following
-					</button>
-				</div>
-
-				<section class="pt-2">
-					{#if loadingContribs}
-						<div class="rounded-md border border-border bg-card p-4">
-							<Skeleton class="h-32 w-full" />
-						</div>
-					{:else}
-						<ContributionGraph
-							data={contributionActivity}
-							totalCount={totalContributions}
-							labels={{
-								totalCount: contributionTitleTemplate,
-								legend: { less: 'Less', more: 'More' }
-							}}
-						/>
-					{/if}
-				</section>
-
-				<section class="flex flex-col gap-3 pt-8">
-					<div class="flex items-center gap-2 flex-wrap">
-						<input
-							type="search"
-							placeholder="Find a repository..."
-							bind:value={userRepoFilter}
-							class="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-						/>
-						<SearchSelect
-							bind:value={userRepoSort}
-							options={[
-								{ value: 'updated', label: 'Last updated' },
-								{ value: 'name', label: 'Name' },
-								{ value: 'stars', label: 'Stars' }
-							]}
-						/>
-						{#if isOwn}
-							<Button variant="brand" size="sm" href="/new"><Plus class="h-3.5 w-3.5" />New</Button>
-						{/if}
+							<Users class="h-3.5 w-3.5" />
+							<span class="font-semibold text-foreground">{formatCountShort(userProfileCtx.followerCount)}</span>
+							<span>{userProfileCtx.followerCount === 1 ? 'follower' : 'followers'}</span>
+						</button>
+						<span class="text-border">.</span>
+						<button
+							type="button"
+							class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground hover:underline"
+							onclick={userProfileCtx.openFollowingDialog}
+						>
+							<span class="font-semibold text-foreground">{formatCountShort(userProfileCtx.followingCount)}</span> following
+						</button>
 					</div>
 
-					{#if sortedFilteredUserRepos.length === 0}
-						<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
-							{userRepoFilter ? 'No repositories match.' : isOwn ? "You don't have any repositories yet." : `${username} doesn't have any public repositories.`}
-							{#if isOwn && !userRepoFilter}
-								<div class="mt-3">
-									<Button variant="brand" size="sm" href="/new">Create a repository</Button>
-								</div>
+					<section class="pt-2">
+						{#if loadingContribs}
+							<div class="rounded-md border border-border bg-card p-4">
+								<Skeleton class="h-32 w-full" />
+							</div>
+						{:else}
+							<ContributionGraph
+								data={contributionActivity}
+								totalCount={totalContributions}
+								labels={{
+									totalCount: contributionTitleTemplate,
+									legend: { less: 'Less', more: 'More' }
+								}}
+							/>
+						{/if}
+					</section>
+
+					<section class="flex flex-col gap-3 pt-8">
+						<div class="flex items-center gap-2 flex-wrap">
+							<input
+								type="search"
+								placeholder="Find a repository..."
+								bind:value={userRepoFilter}
+								class="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+							/>
+							<SearchSelect
+								bind:value={userRepoSort}
+								options={[
+									{ value: 'updated', label: 'Last updated' },
+									{ value: 'name', label: 'Name' },
+									{ value: 'stars', label: 'Stars' }
+								]}
+							/>
+							{#if isOwn}
+								<Button variant="brand" size="sm" href="/new"><Plus class="h-3.5 w-3.5" />New</Button>
 							{/if}
 						</div>
-					{:else}
-						<div class="divide-y divide-secondary overflow-hidden rounded-md border border-border bg-background">
-							{#each sortedFilteredUserRepos as repo}
-								{@const repoOwner = getRepoOwner(repo, username!)}
-								<div class="px-4 py-4 transition-colors hover:bg-card/60">
-									<div class="flex items-center gap-2">
-										<a href="/{repoOwner}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
-										<span
-											class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
-												repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
-											}`}
-										>
-											{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
-											{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
-										</span>
-									</div>
-									{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
-									<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-										{#if repo.language}
-											<span class="flex items-center gap-1.5">
-												<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
-												{repo.language}
-											</span>
-										{/if}
-										{#if (repo.star_count ?? 0) > 0}<span class="flex items-center gap-1"><StarIcon class="h-3 w-3" />{repo.star_count}</span>{/if}
-										<span>Updated {timeAgo(repo.updated_at)}</span>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</section>
 
-				<section class="flex flex-col gap-3 pt-8">
-					<div class="flex items-center justify-between">
-						<h2 class="text-sm font-medium text-muted-foreground">Projects</h2>
-						{#if canCreateProject}
-							<Button variant="brand" size="sm" onclick={() => (showCreateProjectDialog = true)}><Plus class="h-3.5 w-3.5" />Create</Button>
+						{#if sortedFilteredUserRepos.length === 0}
+							<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
+								{userRepoFilter ? 'No repositories match.' : isOwn ? "You don't have any repositories yet." : `${username} doesn't have any public repositories.`}
+								{#if isOwn && !userRepoFilter}
+									<div class="mt-3">
+										<Button variant="brand" size="sm" href="/new">Create a repository</Button>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<div class="divide-y divide-secondary overflow-hidden rounded-md border border-border bg-background">
+								{#each sortedFilteredUserRepos as repo}
+									{@const repoOwner = getRepoOwner(repo, username!)}
+									<div class="px-4 py-4 transition-colors hover:bg-card/60">
+										<div class="flex items-start justify-between gap-4">
+											<div class="min-w-0 flex-1">
+												<div class="flex items-center gap-2">
+													<a href="/{repoOwner}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
+													<span
+														class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+															repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
+														}`}
+													>
+														{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
+														{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
+													</span>
+												</div>
+												{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
+												<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+													{#if repo.language}
+														<span class="flex items-center gap-1.5">
+															<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
+															{repo.language}
+														</span>
+													{/if}
+													{#if (repo.star_count ?? 0) > 0}<span class="flex items-center gap-1"><StarIcon class="h-3 w-3" />{repo.star_count}</span>{/if}
+													<span>Updated {timeAgo(repo.updated_at)}</span>
+												</div>
+											</div>
+											<div class="hidden shrink-0 self-center md:block">
+												<RepoActivitySparkline series={repo.activity_series ?? []} label={`${repo.name} recent activity`} />
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
 						{/if}
-					</div>
-					{#if loadingProjects}
-						<div class="space-y-3">
-							{#each Array(2) as _}
-								<div class="rounded-md border border-border bg-card p-4">
-									<Skeleton class="h-5 w-56 max-w-full" />
-									<Skeleton class="mt-2 h-4 w-full" />
-								</div>
-							{/each}
-						</div>
-					{:else if projectsError}
-						<div class="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{projectsError}</div>
-					{:else if projectList.length === 0}
-						<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
-							No projects yet.
+					</section>
+
+					<section class="flex flex-col gap-3 pt-8">
+						<div class="flex items-center justify-between">
+							<h2 class="text-sm font-medium text-muted-foreground">Projects</h2>
 							{#if canCreateProject}
-								<div class="mt-3">
-									<Button variant="brand" size="sm" onclick={() => (showCreateProjectDialog = true)}>Create first project</Button>
-								</div>
+								<Button variant="brand" size="sm" onclick={() => (showCreateProjectDialog = true)}><Plus class="h-3.5 w-3.5" />Create</Button>
 							{/if}
 						</div>
-					{:else}
-						<div class="space-y-3">
-							{#each projectList as project}
-								<a href="/{username}/projects/{project.id}" class="block rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
-									<div class="flex items-start justify-between gap-3">
-										<h3 class="line-clamp-1 text-base font-semibold text-foreground">{project.title}</h3>
-										<span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-											{#if project.is_public}<Globe2 class="mr-1 h-3 w-3" />Public{:else}<Lock class="mr-1 h-3 w-3" />Private{/if}
-										</span>
+						{#if loadingProjects}
+							<div class="space-y-3">
+								{#each Array(2) as _}
+									<div class="rounded-md border border-border bg-card p-4">
+										<Skeleton class="h-5 w-56 max-w-full" />
+										<Skeleton class="mt-2 h-4 w-full" />
 									</div>
-									{#if project.description}<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{project.description}</p>{/if}
-									<div class="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-										<span>{project.columns?.length ?? 0} columns</span>
-										<span class="inline-flex items-center gap-1 text-primary">Open board <ArrowRight class="h-3.5 w-3.5" /></span>
+								{/each}
+							</div>
+						{:else if projectsError}
+							<div class="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{projectsError}</div>
+						{:else if projectList.length === 0}
+							<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
+								No projects yet.
+								{#if canCreateProject}
+									<div class="mt-3">
+										<Button variant="brand" size="sm" onclick={() => (showCreateProjectDialog = true)}>Create first project</Button>
 									</div>
-								</a>
-							{/each}
-						</div>
-					{/if}
-				</section>
-
-				<section class="flex flex-col gap-3 pt-8">
-					<h2 class="text-sm font-medium text-muted-foreground">Stars</h2>
-					{#if loadingStarred}
-						<div class="space-y-3">
-							{#each Array(2) as _}
-								<div class="rounded-md border border-border bg-card p-4">
-									<Skeleton class="h-5 w-60 max-w-full" />
-									<Skeleton class="mt-2 h-4 w-full" />
-									<div class="mt-3 flex gap-3">
-										<Skeleton class="h-3 w-16" />
-										<Skeleton class="h-3 w-24" />
-									</div>
-								</div>
-							{/each}
-						</div>
-					{:else if starredRepos.length === 0}
-						<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">{username} hasn't starred any repositories yet.</div>
-					{:else}
-						<div class="space-y-3">
-							{#each starredRepos as star}
-								{@const repo = star.repo}
-								{@const repoOwner = repo.org?.login ?? repo.owner?.username ?? username}
-								<div class="rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
-									<div class="min-w-0">
-										<div class="flex flex-wrap items-center gap-2">
-											<a href="/{repoOwner}/{repo.name}" class="truncate text-base font-semibold text-primary hover:underline">{repoOwner}/{repo.name}</a>
-											<span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-												{#if repo.is_private}<Lock class="h-2.5 w-2.5" />Private{:else}Public{/if}
+								{/if}
+							</div>
+						{:else}
+							<div class="space-y-3">
+								{#each projectList as project}
+									<a href="/{username}/projects/{project.id}" class="block rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
+										<div class="flex items-start justify-between gap-3">
+											<h3 class="line-clamp-1 text-base font-semibold text-foreground">{project.title}</h3>
+											<span class="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+												{#if project.is_public}<Globe2 class="mr-1 h-3 w-3" />Public{:else}<Lock class="mr-1 h-3 w-3" />Private{/if}
 											</span>
 										</div>
-										{#if repo.description}<p class="mt-1 text-xs text-muted-foreground">{repo.description}</p>{/if}
-									</div>
-									<div class="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
-										{#if repo.language}
-											<span class="flex items-center gap-1.5">
-												<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
-												{repo.language}
-											</span>
-										{/if}
-										<span>Updated {timeAgo(repo.updated_at)}</span>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</section>
+										{#if project.description}<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{project.description}</p>{/if}
+										<div class="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+											<span>{project.columns?.length ?? 0} columns</span>
+											<span class="inline-flex items-center gap-1 text-primary">Open board <ArrowRight class="h-3.5 w-3.5" /></span>
+										</div>
+									</a>
+								{/each}
+							</div>
+						{/if}
+					</section>
 
-				<section class="flex flex-col gap-3 pt-8">
-					<h2 class="text-sm font-medium text-muted-foreground">Packages</h2>
-					{#if loadingUserPackages}
-						<div class="space-y-3">
-							{#each Array(2) as _}
-								<div class="rounded-md border border-border bg-card p-4">
-									<div class="flex items-start gap-3">
-										<Skeleton class="mt-0.5 h-5 w-5 rounded-sm" />
-										<div class="flex-1 space-y-2">
-											<Skeleton class="h-5 w-44 max-w-full" />
-											<Skeleton class="h-4 w-full" />
+					<section class="flex flex-col gap-3 pt-8">
+						<h2 class="text-sm font-medium text-muted-foreground">Stars</h2>
+						{#if loadingStarred}
+							<div class="space-y-3">
+								{#each Array(2) as _}
+									<div class="rounded-md border border-border bg-card p-4">
+										<Skeleton class="h-5 w-60 max-w-full" />
+										<Skeleton class="mt-2 h-4 w-full" />
+										<div class="mt-3 flex gap-3">
+											<Skeleton class="h-3 w-16" />
+											<Skeleton class="h-3 w-24" />
 										</div>
 									</div>
-								</div>
-							{/each}
-						</div>
-					{:else if userContainerRepos.length === 0}
-						<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">No packages published yet.</div>
-					{:else}
-						<div class="space-y-3">
-							{#each userContainerRepos as pkg}
-								<div class="rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
-									<div class="flex items-start gap-3">
-										<Package class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-										<div class="min-w-0 flex-1">
+								{/each}
+							</div>
+						{:else if starredRepos.length === 0}
+							<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">{username} hasn't starred any repositories yet.</div>
+						{:else}
+							<div class="space-y-3">
+								{#each starredRepos as star}
+									{@const repo = star.repo}
+									{@const repoOwner = repo.org?.login ?? repo.owner?.username ?? username}
+									<div class="rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
+										<div class="min-w-0">
 											<div class="flex flex-wrap items-center gap-2">
-												<a href="/{pkg.namespace}/packages/{pkg.name}" class="text-base font-semibold text-primary hover:underline">{pkg.name}</a>
+												<a href="/{repoOwner}/{repo.name}" class="truncate text-base font-semibold text-primary hover:underline">{repoOwner}/{repo.name}</a>
 												<span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-													{pkg.is_public ? 'Public' : 'Private'}
+													{#if repo.is_private}<Lock class="h-2.5 w-2.5" />Private{:else}Public{/if}
 												</span>
 											</div>
-											<p class="mt-1 overflow-x-auto text-xs font-mono text-muted-foreground">docker pull {registryHost}/{pkg.namespace}/{pkg.name}:latest</p>
+											{#if repo.description}<p class="mt-1 text-xs text-muted-foreground">{repo.description}</p>{/if}
+										</div>
+										<div class="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+											{#if repo.language}
+												<span class="flex items-center gap-1.5">
+													<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
+													{repo.language}
+												</span>
+											{/if}
+											<span>Updated {timeAgo(repo.updated_at)}</span>
 										</div>
 									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</section>
+								{/each}
+							</div>
+						{/if}
+					</section>
+
+					<section class="flex flex-col gap-3 pt-8">
+						<h2 class="text-sm font-medium text-muted-foreground">Packages</h2>
+						{#if loadingUserPackages}
+							<div class="space-y-3">
+								{#each Array(2) as _}
+									<div class="rounded-md border border-border bg-card p-4">
+										<div class="flex items-start gap-3">
+											<Skeleton class="mt-0.5 h-5 w-5 rounded-sm" />
+											<div class="flex-1 space-y-2">
+												<Skeleton class="h-5 w-44 max-w-full" />
+												<Skeleton class="h-4 w-full" />
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{:else if userContainerRepos.length === 0}
+							<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">No packages published yet.</div>
+						{:else}
+							<div class="space-y-3">
+								{#each userContainerRepos as pkg}
+									<div class="rounded-md border border-secondary bg-card p-4 transition-colors hover:border-border">
+										<div class="flex items-start gap-3">
+											<Package class="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+											<div class="min-w-0 flex-1">
+												<div class="flex flex-wrap items-center gap-2">
+													<a href="/{pkg.namespace}/packages/{pkg.name}" class="text-base font-semibold text-primary hover:underline">{pkg.name}</a>
+													<span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+														{pkg.is_public ? 'Public' : 'Private'}
+													</span>
+												</div>
+												<p class="mt-1 overflow-x-auto text-xs font-mono text-muted-foreground">docker pull {registryHost}/{pkg.namespace}/{pkg.name}:latest</p>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</section>
 			</div>
 		</div>
 	</div>
@@ -777,142 +789,149 @@
 			</div>
 
 			<div class="mt-3 flex flex-col gap-3 pb-8">
-				<div class="flex min-w-0 flex-1 flex-col gap-0.5">
-					<h1 class="text-2xl font-semibold tracking-tight">{orgCtx.org.display_name || orgCtx.org.login}</h1>
-					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-muted-foreground">
-						<span>@{orgCtx.org.login}</span>
-						<span class="text-border">.</span>
-						<span class="flex items-center gap-1 text-sm">
-							<Building2 class="h-3.5 w-3.5" />
-							Organization
-						</span>
+					<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+						<h1 class="text-2xl font-semibold tracking-tight">{orgCtx.org.display_name || orgCtx.org.login}</h1>
+						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-base text-muted-foreground">
+							<span>@{orgCtx.org.login}</span>
+							<span class="text-border">.</span>
+							<span class="flex items-center gap-1 text-sm">
+								<Building2 class="h-3.5 w-3.5" />
+								Organization
+							</span>
+						</div>
 					</div>
-				</div>
 
-				{#if orgCtx.org.description}
-					<p class="max-w-lg text-sm leading-relaxed">{orgCtx.org.description}</p>
-				{/if}
+					{#if orgCtx.org.description}
+						<p class="max-w-lg text-sm leading-relaxed">{orgCtx.org.description}</p>
+					{/if}
 
-				<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-					<span class="flex items-center gap-1.5"><Users class="h-3.5 w-3.5" />{orgCtx.memberCount} member{orgCtx.memberCount !== 1 ? 's' : ''}</span>
-					<button type="button" class="flex cursor-pointer items-center gap-1.5 transition-colors hover:text-foreground hover:underline" onclick={openOrgFollowersDialog}>
-						<UserPlus class="h-3.5 w-3.5" />
-						<span class="font-semibold text-foreground">{formatCountShort(orgCtx.followerCount)}</span>
-						<span>{orgCtx.followerCount === 1 ? 'follower' : 'followers'}</span>
-					</button>
-					{#if orgCtx.org.location}
-						<span class="flex items-center gap-1.5"><MapPin class="h-3.5 w-3.5" />{orgCtx.org.location}</span>
-					{/if}
-					{#if orgCtx.org.website}
-						<a
-							href={hrefForLink(orgCtx.org.website)}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="flex items-center gap-1.5 transition-colors hover:text-foreground"
-						>
-							<Link class="h-3.5 w-3.5" />
-							{displayLink(orgCtx.org.website)}
-						</a>
-					{/if}
-					{#each orgCtx.org.social_links ?? [] as social}
-						{#if social?.url?.trim()}
-							{@const meta = socialMeta(social.url)}
-							<a href={hrefForLink(social.url)} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 transition-colors hover:text-foreground">
-								{#if meta.brandSvg}
-									<span class="social-brand-icon shrink-0" style:color={meta.brandColor ?? undefined} aria-hidden="true">
-										{@html meta.brandSvg}
-									</span>
-								{:else}
-									<Link class="h-3.5 w-3.5" />
-								{/if}
-								{meta.text}
+					<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+						<span class="flex items-center gap-1.5"><Users class="h-3.5 w-3.5" />{orgCtx.memberCount} member{orgCtx.memberCount !== 1 ? 's' : ''}</span>
+						<button type="button" class="flex cursor-pointer items-center gap-1.5 transition-colors hover:text-foreground hover:underline" onclick={openOrgFollowersDialog}>
+							<UserPlus class="h-3.5 w-3.5" />
+							<span class="font-semibold text-foreground">{formatCountShort(orgCtx.followerCount)}</span>
+							<span>{orgCtx.followerCount === 1 ? 'follower' : 'followers'}</span>
+						</button>
+						{#if orgCtx.org.location}
+							<span class="flex items-center gap-1.5"><MapPin class="h-3.5 w-3.5" />{orgCtx.org.location}</span>
+						{/if}
+						{#if orgCtx.org.website}
+							<a
+								href={hrefForLink(orgCtx.org.website)}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="flex items-center gap-1.5 transition-colors hover:text-foreground"
+							>
+								<Link class="h-3.5 w-3.5" />
+								{displayLink(orgCtx.org.website)}
 							</a>
 						{/if}
-					{/each}
-				</div>
-
-				<div class="flex items-center gap-2 pt-1">
-					<div class="flex items-center -space-x-2">
-						{#each orgMembers.slice(0, 12) as m}
-							<a href="/{m.user.username}" title="@{m.user.username}" class="relative">
-								<div class="size-8 overflow-hidden rounded-full border-2 border-card bg-secondary">
-									{#if m.user.avatar_url}
-										<img src={mediaUrl(m.user.avatar_url)} alt={m.user.username} class="h-full w-full object-cover" />
+						{#each orgCtx.org.social_links ?? [] as social}
+							{#if social?.url?.trim()}
+								{@const meta = socialMeta(social.url)}
+								<a href={hrefForLink(social.url)} target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 transition-colors hover:text-foreground">
+									{#if meta.brandSvg}
+										<span class="social-brand-icon shrink-0" style:color={meta.brandColor ?? undefined} aria-hidden="true">
+											{@html meta.brandSvg}
+										</span>
 									{:else}
-										<div class="flex h-full w-full items-center justify-center text-xs font-semibold text-primary">{m.user.username[0].toUpperCase()}</div>
+										<Link class="h-3.5 w-3.5" />
 									{/if}
-								</div>
-							</a>
+									{meta.text}
+								</a>
+							{/if}
 						{/each}
-						{#if orgMembers.length > 12}
-							<a href="/{username}/people" class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-semibold text-muted-foreground">
-								+{orgMembers.length - 12}
-							</a>
-						{/if}
-					</div>
-				</div>
-
-				<section class="flex flex-col gap-3 pt-8">
-					<div class="flex items-center gap-2 flex-wrap">
-						<input
-							type="search"
-							placeholder="Find a repository..."
-							bind:value={orgRepoFilter}
-							class="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-						/>
-						<SearchSelect
-							bind:value={orgRepoSort}
-							options={[
-								{ value: 'updated', label: 'Last updated' },
-								{ value: 'name', label: 'Name' },
-								{ value: 'stars', label: 'Stars' }
-							]}
-						/>
-						{#if orgCtx.isMember}
-							<Button variant="brand" size="sm" href="/{username}/new"><Plus class="h-3.5 w-3.5" />New</Button>
-						{/if}
 					</div>
 
-					{#if sortedFilteredOrgRepos.length === 0}
-						<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
-							{orgRepoFilter ? 'No repositories match.' : 'No repositories yet.'}
-							{#if orgCtx.isMember && !orgRepoFilter}
-								<div class="mt-3">
-									<Button variant="brand" size="sm" href="/{username}/new">Create a repository</Button>
-								</div>
+					<div class="flex items-center gap-2 pt-1">
+						<div class="flex items-center -space-x-2">
+							{#each orgMembers.slice(0, 12) as m}
+								<a href="/{m.user.username}" title="@{m.user.username}" class="relative">
+									<div class="size-8 overflow-hidden rounded-full border-2 border-card bg-secondary">
+										{#if m.user.avatar_url}
+											<img src={mediaUrl(m.user.avatar_url)} alt={m.user.username} class="h-full w-full object-cover" />
+										{:else}
+											<div class="flex h-full w-full items-center justify-center text-xs font-semibold text-primary">{m.user.username[0].toUpperCase()}</div>
+										{/if}
+									</div>
+								</a>
+							{/each}
+							{#if orgMembers.length > 12}
+								<a href="/{username}/people" class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-semibold text-muted-foreground">
+									+{orgMembers.length - 12}
+								</a>
 							{/if}
 						</div>
-					{:else}
-						<div class="divide-y divide-secondary overflow-hidden rounded-md border border-border bg-background">
-							{#each sortedFilteredOrgRepos as repo}
-								<div class="px-4 py-4 transition-colors hover:bg-card/60">
-									<div class="flex items-center gap-2">
-										<a href="/{username}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
-										<span
-											class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
-												repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
-											}`}
-										>
-											{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
-											{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
-										</span>
-									</div>
-									{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
-									<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-										{#if repo.language}
-											<span class="flex items-center gap-1.5">
-												<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
-												{repo.language}
-											</span>
-										{/if}
-										{#if (repo.star_count ?? 0) > 0}<span class="flex items-center gap-1"><StarIcon class="h-3 w-3" />{repo.star_count}</span>{/if}
-										<span>Updated {timeAgo(repo.updated_at)}</span>
-									</div>
-								</div>
-							{/each}
+					</div>
+
+					<section class="flex flex-col gap-3 pt-8">
+						<div class="flex items-center gap-2 flex-wrap">
+							<input
+								type="search"
+								placeholder="Find a repository..."
+								bind:value={orgRepoFilter}
+								class="h-9 flex-1 min-w-[180px] rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+							/>
+							<SearchSelect
+								bind:value={orgRepoSort}
+								options={[
+									{ value: 'updated', label: 'Last updated' },
+									{ value: 'name', label: 'Name' },
+									{ value: 'stars', label: 'Stars' }
+								]}
+							/>
+							{#if orgCtx.isMember}
+								<Button variant="brand" size="sm" href="/{username}/new"><Plus class="h-3.5 w-3.5" />New</Button>
+							{/if}
 						</div>
-					{/if}
-				</section>
+
+						{#if sortedFilteredOrgRepos.length === 0}
+							<div class="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
+								{orgRepoFilter ? 'No repositories match.' : 'No repositories yet.'}
+								{#if orgCtx.isMember && !orgRepoFilter}
+									<div class="mt-3">
+										<Button variant="brand" size="sm" href="/{username}/new">Create a repository</Button>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<div class="divide-y divide-secondary overflow-hidden rounded-md border border-border bg-background">
+								{#each sortedFilteredOrgRepos as repo}
+									<div class="px-4 py-4 transition-colors hover:bg-card/60">
+										<div class="flex items-start justify-between gap-4">
+											<div class="min-w-0 flex-1">
+												<div class="flex items-center gap-2">
+													<a href="/{username}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
+													<span
+														class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+															repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
+														}`}
+													>
+														{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
+														{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
+													</span>
+												</div>
+												{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
+												<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+													{#if repo.language}
+														<span class="flex items-center gap-1.5">
+															<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{langColor(repo.language)}"></span>
+															{repo.language}
+														</span>
+													{/if}
+													{#if (repo.star_count ?? 0) > 0}<span class="flex items-center gap-1"><StarIcon class="h-3 w-3" />{repo.star_count}</span>{/if}
+													<span>Updated {timeAgo(repo.updated_at)}</span>
+												</div>
+											</div>
+											<div class="hidden shrink-0 self-center md:block">
+												<RepoActivitySparkline series={repo.activity_series ?? []} label={`${repo.name} recent activity`} />
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</section>
 
 				<section class="flex flex-col gap-3 pt-8">
 					<div class="flex items-center justify-between">

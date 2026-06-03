@@ -29,6 +29,13 @@ type WorkflowService struct {
 	workspacePath string
 }
 
+type WorkflowDefinitionSummary struct {
+	Name           string `json:"name"`
+	Path           string `json:"path"`
+	CanDispatch    bool   `json:"can_dispatch"`
+	SupportsManual bool   `json:"supports_manual"`
+}
+
 func NewWorkflowService(db *gorm.DB, gitSvc *GitService, repoSvc *RepoService, runner *WorkflowRunner, cfg *config.Config, repoEnvSvc *RepoEnvService) *WorkflowService {
 	sem := make(chan struct{}, cfg.WorkflowMaxConcurrentRuns)
 	return &WorkflowService{
@@ -568,19 +575,28 @@ func (s *WorkflowService) GetRun(runID string) (*models.WorkflowRun, error) {
 	return &run, nil
 }
 
-// ListDispatchableWorkflows returns all workflow file paths present at the given ref.
+// ListDispatchableWorkflows returns all workflow files present at the given ref.
 // Any workflow can be manually dispatched regardless of its trigger configuration.
-func (s *WorkflowService) ListDispatchableWorkflows(ownerUsername, repoName, ref string) ([]string, error) {
+func (s *WorkflowService) ListDispatchableWorkflows(ownerUsername, repoName, ref string) ([]WorkflowDefinitionSummary, error) {
 	repoPath := s.repoSvc.RepoPath(ownerUsername, repoName)
 	files, err := FindAllWorkflowFiles(s.gitSvc, repoPath, ref)
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(files))
+	workflows := make([]WorkflowDefinitionSummary, 0, len(files))
 	for _, f := range files {
-		paths = append(paths, f.Path)
+		name := strings.TrimSpace(f.Def.Name)
+		if name == "" {
+			name = f.Path
+		}
+		workflows = append(workflows, WorkflowDefinitionSummary{
+			Name:           name,
+			Path:           f.Path,
+			CanDispatch:    true,
+			SupportsManual: f.Def.On.WorkflowDispatch != nil,
+		})
 	}
-	return paths, nil
+	return workflows, nil
 }
 
 // DispatchWorkflow manually triggers workflow_dispatch workflows in the repo at the given ref.
