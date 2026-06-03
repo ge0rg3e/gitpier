@@ -98,6 +98,11 @@ const (
 	commitCountTimeout    = 1200 * time.Millisecond
 	contributionsCacheTTL = 10 * time.Minute
 	contributionsTimeout  = 8 * time.Second
+	treeMetaDirectMax     = 12
+	treeMetaDirectWorkers = 6
+	treeMetaDirectTimeout = 300 * time.Millisecond
+	treeMetaScanLimit     = 64
+	treeMetaTimeout       = 1200 * time.Millisecond
 )
 
 func cloneDayCounts(src map[string]int) map[string]int {
@@ -716,6 +721,10 @@ func fillEntryDates(repoPath string, head plumbing.Hash, dirPath string, entries
 	if len(entries) == 0 {
 		return
 	}
+	if len(entries) <= treeMetaDirectMax {
+		fillEntryDatesDirect(repoPath, head.String(), dirPath, entries)
+		return
+	}
 
 	// Build a name→entry map so we can resolve each path in O(1).
 	type slot struct {
@@ -736,13 +745,14 @@ func fillEntryDates(repoPath string, head plumbing.Hash, dirPath string, entries
 		"log", "--first-parent",
 		"--pretty=tformat:COMMIT\x1f%H\x1f%aI\x1f%an\x1f%s",
 		"--name-only",
+		"-n", strconv.Itoa(treeMetaScanLimit),
 		head.String(),
 	}
 	if dirPath != "" {
 		args = append(args, "--", dirPath+"/")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), treeMetaTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -819,6 +829,93 @@ func fillEntryDates(repoPath string, head plumbing.Hash, dirPath string, entries
 		sl.entry.Author = curAuthor
 		sl.entry.Message = curMsg
 		remaining--
+	}
+
+}
+
+func fillEntryDatesDirect(repoPath, head, dirPath string, entries []*FileEntry) {
+	type result struct {
+		entry     *FileEntry
+		commitSHA string
+		date      time.Time
+		author    string
+		message   string
+	}
+
+	jobs := make(chan *FileEntry)
+	results := make(chan result, len(entries))
+	var wg sync.WaitGroup
+
+	workers := treeMetaDirectWorkers
+	if len(entries) < workers {
+		workers = len(entries)
+	}
+	if workers <= 0 {
+		return
+	}
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range jobs {
+				path := entry.Path
+				if dirPath != "" && !strings.HasPrefix(path, dirPath+"/") {
+					path = dirPath + "/" + entry.Name
+				}
+				if entry.Type == "tree" && !strings.HasSuffix(path, "/") {
+					path += "/"
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), treeMetaDirectTimeout)
+				out, err := exec.CommandContext(
+					ctx,
+					"git",
+					"-C", repoPath,
+					"log",
+					"-1",
+					"--pretty=format:%H\x1f%aI\x1f%an\x1f%s",
+					head,
+					"--",
+					path,
+				).Output()
+				cancel()
+				if err != nil || len(out) == 0 {
+					continue
+				}
+
+				parts := strings.SplitN(strings.TrimSpace(string(out)), "\x1f", 4)
+				if len(parts) != 4 {
+					continue
+				}
+				date, err := time.Parse(time.RFC3339, parts[1])
+				if err != nil {
+					continue
+				}
+
+				results <- result{
+					entry:     entry,
+					commitSHA: parts[0],
+					date:      date,
+					author:    parts[2],
+					message:   parts[3],
+				}
+			}
+		}()
+	}
+
+	for _, entry := range entries {
+		jobs <- entry
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+
+	for res := range results {
+		res.entry.CommitSHA = res.commitSHA
+		res.entry.Date = res.date
+		res.entry.Author = res.author
+		res.entry.Message = res.message
 	}
 }
 
