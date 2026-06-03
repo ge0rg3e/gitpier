@@ -514,8 +514,8 @@ export const repos = {
 			`/repos/${username}/${repo}/tree?${new URLSearchParams({
 				...(ref ? { ref } : {}),
 				...(path ? { path } : {}),
-				...(options?.includeMeta === false ? { include_meta: 'false' } : {}),
-				...(options?.includeHead === false ? { include_head: 'false' } : {})
+				...(options?.includeMeta !== undefined ? { include_meta: String(options.includeMeta) } : {}),
+				...(options?.includeHead !== undefined ? { include_head: String(options.includeHead) } : {})
 			})}`
 		),
 

@@ -1428,21 +1428,30 @@ func (h *RepoHandler) GetUserStarredRepos(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "user not found")
 	}
 
+	var currentUser *models.User
+	if cu, ok := c.Get("user").(*models.User); ok {
+		currentUser = cu
+	}
+
 	stars, err := h.repoSvc.ListStarred(c.Request().Context(), user.ID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list starred repositories")
 	}
 
-	public := make([]models.Star, 0, len(stars))
+	visible := make([]models.Star, 0, len(stars))
 	for _, s := range stars {
 		if !s.Repo.IsPrivate {
-			public = append(public, s)
+			visible = append(visible, s)
+			continue
+		}
+		if currentUser != nil && (currentUser.ID == user.ID || h.repoSvc.HasAccess(&s.Repo, currentUser.ID, false)) {
+			visible = append(visible, s)
 		}
 	}
-	sanitizeStarsForPublic(public)
+	sanitizeStarsForPublic(visible)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"stars": public,
+		"stars": visible,
 	})
 }
 

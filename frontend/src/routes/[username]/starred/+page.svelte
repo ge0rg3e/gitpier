@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { starred, type Star } from '$lib/api/client';
 	import { timeAgo } from '$lib/utils';
-	import { Lock, Star as StarIcon } from '@lucide/svelte';
+	import { Globe, Lock, Star as StarIcon } from '@lucide/svelte';
 
 	const username = $derived(page.params.username);
 
@@ -72,13 +72,18 @@
 	<div class="space-y-3">
 		{#each starredRepos as star}
 			{@const repo = star.repo}
-			{@const repoOwner = repo.org?.username ?? repo.owner?.username ?? username}
+			{@const repoOwner = repo.org?.login ?? repo.owner?.username ?? username}
 			<div class="rounded-md border border-secondary bg-card p-4 hover:border-border transition-colors">
 				<div class="min-w-0">
 					<div class="flex items-center gap-2 flex-wrap">
 						<a href="/{repoOwner}/{repo.name}" class="text-base font-semibold text-primary hover:underline truncate">{repoOwner}/{repo.name}</a>
-						<span class="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-							{#if repo.is_private}<Lock class="h-2.5 w-2.5" />Private{:else}Public{/if}
+						<span
+							class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+								repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
+							}`}
+						>
+							{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe class="h-2.5 w-2.5" />{/if}
+							{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
 						</span>
 					</div>
 					{#if repo.description}

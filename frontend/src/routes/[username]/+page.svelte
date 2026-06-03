@@ -586,7 +586,14 @@
 								<div class="px-4 py-4 transition-colors hover:bg-card/60">
 									<div class="flex items-center gap-2">
 										<a href="/{repoOwner}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
-										<span class="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{repo.is_private ? 'Private' : 'Public'}</span>
+										<span
+											class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+												repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
+											}`}
+										>
+											{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
+											{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
+										</span>
 									</div>
 									{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
 									<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
@@ -881,7 +888,14 @@
 								<div class="px-4 py-4 transition-colors hover:bg-card/60">
 									<div class="flex items-center gap-2">
 										<a href="/{username}/{repo.name}" class="text-base font-semibold text-primary hover:underline">{repo.name}</a>
-										<span class="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">{repo.is_private ? 'Private' : 'Public'}</span>
+										<span
+											class={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+												repo.is_archived ? 'border-amber-700/40 bg-amber-900/20 text-amber-300' : 'border-border text-muted-foreground'
+											}`}
+										>
+											{#if repo.is_private}<Lock class="h-2.5 w-2.5" />{:else}<Globe2 class="h-2.5 w-2.5" />{/if}
+											{repo.is_private ? 'Private' : 'Public'}{repo.is_archived ? ' archive' : ''}
+										</span>
 									</div>
 									{#if repo.description}<p class="mt-1 text-sm text-muted-foreground">{repo.description}</p>{/if}
 									<div class="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
