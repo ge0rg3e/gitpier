@@ -4,6 +4,7 @@
 	import { workflows, API_BASE, type WorkflowRun, type WorkflowJob, type WorkflowStep, type WorkflowStatus } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import CodeViewer from '$lib/components/CodeViewer.svelte';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog/index.js';
 	import { timeAgo } from '$lib/utils';
 	import { Zap, GitBranch, GitCommit, CheckCircle2, XCircle, Clock, Loader, Ban, ChevronDown, ChevronRight, AlertCircle, RotateCcw, Trash2, Download } from '@lucide/svelte';
 
@@ -14,6 +15,7 @@
 	let rerunning = $state(false);
 	let deleting = $state(false);
 	let downloading = $state(false);
+	let showDeleteDialog = $state(false);
 	let expanded = $state<Record<string, boolean>>({});
 
 	const { username, repo, runId } = $derived(page.params);
@@ -82,7 +84,7 @@
 	}
 
 	async function deleteRun() {
-		if (!run || !confirm('Delete this run?')) return;
+		if (!run) return;
 		deleting = true;
 		error = '';
 		try {
@@ -91,6 +93,7 @@
 		} catch (e: any) {
 			error = e.message;
 		} finally {
+			showDeleteDialog = false;
 			deleting = false;
 		}
 	}
@@ -210,14 +213,38 @@
 				</div>
 				{#if authStore.isAuthenticated}
 					<div class="flex items-center gap-2 shrink-0">
-						<button
-							onclick={deleteRun}
-							disabled={deleting}
-							class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-3 text-xs text-red-400 hover:bg-red-900/20 hover:border-red-800/50 disabled:opacity-60 transition-colors"
-						>
-							<Trash2 class="h-3.5 w-3.5 {deleting ? 'animate-spin' : ''}" />
-							Delete
-						</button>
+						<AlertDialog.Root bind:open={showDeleteDialog}>
+							<AlertDialog.Trigger
+								disabled={deleting}
+								class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-secondary px-3 text-xs text-red-400 hover:bg-red-900/20 hover:border-red-800/50 disabled:opacity-60 transition-colors"
+							>
+								<Trash2 class="h-3.5 w-3.5 {deleting ? 'animate-spin' : ''}" />
+								Delete
+							</AlertDialog.Trigger>
+							<AlertDialog.Content>
+								<AlertDialog.Header>
+									<AlertDialog.Media class="bg-red-950/60 text-red-400">
+										<Trash2 class="h-5 w-5" />
+									</AlertDialog.Media>
+									<AlertDialog.Title>Delete workflow run</AlertDialog.Title>
+									<AlertDialog.Description>
+										This removes the run history for <span class="font-medium text-foreground">{run.workflow_name}</span>. This action cannot be undone.
+									</AlertDialog.Description>
+								</AlertDialog.Header>
+								<AlertDialog.Footer>
+									<AlertDialog.Cancel disabled={deleting}>Cancel</AlertDialog.Cancel>
+									<AlertDialog.Action variant="destructive" disabled={deleting} onclick={deleteRun}>
+										{#if deleting}
+											<Loader class="h-3.5 w-3.5 animate-spin" />
+											Deleting...
+										{:else}
+											<Trash2 class="h-3.5 w-3.5" />
+											Delete run
+										{/if}
+									</AlertDialog.Action>
+								</AlertDialog.Footer>
+							</AlertDialog.Content>
+						</AlertDialog.Root>
 						{#if rerunning}
 							<button
 								disabled
