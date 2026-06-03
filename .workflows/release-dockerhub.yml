@@ -3,7 +3,7 @@ name: Release Docker Images
 on:
   release:
     types:
-      - created
+      - published
 
 jobs:
   docker-release:
@@ -41,20 +41,26 @@ jobs:
       - name: Build and push backend image
         run: |
           set -eu
-          IMAGE="gitpier/backend:${VERSION}"
-          docker build -f backend/Dockerfile -t "$IMAGE" backend
-          docker push "$IMAGE"
+          VERSION_IMAGE="gitpier/backend:${VERSION}"
+          LATEST_IMAGE="gitpier/backend:latest"
+          docker build -f backend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" backend
+          docker push "$VERSION_IMAGE"
+          docker push "$LATEST_IMAGE"
 
       - name: Build and push frontend image
         run: |
           set -eu
-          IMAGE="gitpier/frontend:${VERSION}"
-          docker build -f frontend/Dockerfile -t "$IMAGE" frontend
-          docker push "$IMAGE"
+          VERSION_IMAGE="gitpier/frontend:${VERSION}"
+          LATEST_IMAGE="gitpier/frontend:latest"
+          docker build -f frontend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" frontend
+          docker push "$VERSION_IMAGE"
+          docker push "$LATEST_IMAGE"
 
       - name: Build and push action-runner image
         run: |
           set -eu
-          IMAGE="gitpier/action-runner:${VERSION}"
-          docker build -f action-runner/Dockerfile -t "$IMAGE" action-runner
-          docker push "$IMAGE"
+          VERSION_IMAGE="gitpier/action-runner:${VERSION}"
+          LATEST_IMAGE="gitpier/action-runner:latest"
+          docker build -f action-runner/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" action-runner
+          docker push "$VERSION_IMAGE"
+          docker push "$LATEST_IMAGE"
