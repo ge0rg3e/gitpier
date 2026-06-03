@@ -954,7 +954,10 @@
 </Dialog.Root>
 
 <Dialog.Root bind:open={showItemDetailsDialog}>
-	<Dialog.Content class="!max-w-[min(1280px,calc(100vw-2rem))] sm:!max-w-[min(1280px,calc(100vw-3rem))] rounded-2xl p-0">
+	<Dialog.Content
+		showCloseButton={false}
+		class="!max-w-[min(1280px,calc(100vw-2rem))] sm:!max-w-[min(1280px,calc(100vw-3rem))] rounded-2xl p-0"
+	>
 		<div class="flex items-center justify-between border-b border-secondary px-4 py-3">
 			<div class="flex min-w-0 items-center gap-2">
 				<p class="truncate text-xl font-semibold text-foreground">{itemDetailsTitle || 'Item details'}</p>
@@ -1153,7 +1156,10 @@
 </Dialog.Root>
 
 <Dialog.Root bind:open={showCreateIssueDialog}>
-	<Dialog.Content class="!max-w-[min(1280px,calc(100vw-2rem))] sm:!max-w-[min(1280px,calc(100vw-3rem))] rounded-2xl p-0">
+	<Dialog.Content
+		showCloseButton={false}
+		class="!max-w-[min(1280px,calc(100vw-2rem))] sm:!max-w-[min(1280px,calc(100vw-3rem))] rounded-2xl p-0"
+	>
 		<div class="flex items-center justify-between border-b border-secondary px-4 py-3">
 			<p class="truncate text-xl font-semibold text-foreground">Create New Issue</p>
 			<button class="rounded p-1 text-muted-foreground hover:bg-secondary" onclick={() => (showCreateIssueDialog = false)} aria-label="Close">
