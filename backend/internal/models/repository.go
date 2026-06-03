@@ -29,6 +29,7 @@ type Repository struct {
 	ForkedFromRepoID *string     `gorm:"index" json:"forked_from_repo_id,omitempty"`
 	ForkedFromRepo   *Repository `gorm:"foreignKey:ForkedFromRepoID" json:"forked_from_repo,omitempty"`
 	ForkCount        int64       `gorm:"-" json:"fork_count"`
+	ActivitySeries   []int       `gorm:"-" json:"activity_series,omitempty"`
 
 	Collaborators []Collaborator `gorm:"foreignKey:RepoID" json:"-"`
 }

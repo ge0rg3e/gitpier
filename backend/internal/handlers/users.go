@@ -171,6 +171,7 @@ func (h *UserHandler) GetProfile(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list repositories")
 	}
+	attachRepoActivitySeries(h.repoSvc, h.gitSvc, username, repos)
 	sanitizeUserForPublic(user)
 	sanitizeReposForPublic(repos)
 

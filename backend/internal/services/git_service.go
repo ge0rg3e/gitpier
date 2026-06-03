@@ -53,6 +53,11 @@ type contributionsCacheEntry struct {
 	expiry time.Time
 }
 
+type activitySeriesCacheEntry struct {
+	series []int
+	expiry time.Time
+}
+
 type CommitFilters struct {
 	Author string
 	Query  string
@@ -76,6 +81,9 @@ var (
 	contributionsCacheMu sync.RWMutex
 	contributionsCache   = make(map[string]contributionsCacheEntry)
 
+	activitySeriesCacheMu sync.RWMutex
+	activitySeriesCache   = make(map[string]activitySeriesCacheEntry)
+
 	contributionsInFlightMu sync.Mutex
 	contributionsInFlight   = make(map[string]*contributionsInflight)
 
@@ -97,6 +105,7 @@ const (
 	headCommitCacheTTL    = 15 * time.Minute
 	commitCountTimeout    = 1200 * time.Millisecond
 	contributionsCacheTTL = 10 * time.Minute
+	activitySeriesTTL     = 10 * time.Minute
 	contributionsTimeout  = 8 * time.Second
 	treeMetaDirectMax     = 12
 	treeMetaDirectWorkers = 6
@@ -114,6 +123,13 @@ func cloneDayCounts(src map[string]int) map[string]int {
 		dst[k] = v
 	}
 	return dst
+}
+
+func cloneIntSlice(src []int) []int {
+	if len(src) == 0 {
+		return []int{}
+	}
+	return append([]int(nil), src...)
 }
 
 // treeCacheEvict removes expired entries and, when the cache still exceeds
@@ -1853,6 +1869,66 @@ func (s *GitService) GetContributions(repoPath, authorEmail string, since time.T
 
 	finish(counts, nil)
 	return counts, nil
+}
+
+func (s *GitService) GetRecentActivitySeries(repoPath string, days int) ([]int, error) {
+	if strings.TrimSpace(repoPath) == "" || days <= 0 {
+		return []int{}, nil
+	}
+
+	series := make([]int, days)
+	head, err := resolveRefHashFast(repoPath, "HEAD")
+	if err != nil || strings.TrimSpace(head) == "" {
+		return series, nil
+	}
+
+	cacheKey := repoPath + "\x00" + head + "\x00" + strconv.Itoa(days)
+	now := time.Now().UTC()
+
+	activitySeriesCacheMu.RLock()
+	if cached, ok := activitySeriesCache[cacheKey]; ok && now.Before(cached.expiry) {
+		activitySeriesCacheMu.RUnlock()
+		return cloneIntSlice(cached.series), nil
+	}
+	activitySeriesCacheMu.RUnlock()
+
+	end := now.Truncate(24 * time.Hour)
+	start := end.AddDate(0, 0, -(days - 1))
+	ctx, cancel := context.WithTimeout(context.Background(), contributionsTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "git", "-C", repoPath, "log", "--format=%aI", "-n", "30", head).Output()
+	if err != nil {
+		return series, nil
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		ts, parseErr := time.Parse(time.RFC3339, line)
+		if parseErr != nil {
+			continue
+		}
+
+		day := ts.UTC().Truncate(24 * time.Hour)
+		dayIndex := int(day.Sub(start).Hours() / 24)
+		if dayIndex >= 0 && dayIndex < days {
+			series[dayIndex]++
+		}
+	}
+
+	activitySeriesCacheMu.Lock()
+	activitySeriesCache[cacheKey] = activitySeriesCacheEntry{
+		series: cloneIntSlice(series),
+		expiry: time.Now().Add(activitySeriesTTL),
+	}
+	activitySeriesCacheMu.Unlock()
+
+	return series, nil
 }
 
 func (s *GitService) BranchExists(repoPath, branchName string) (bool, error) {
