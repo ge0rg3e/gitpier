@@ -37,45 +37,15 @@ jobs:
           set -eu
           echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 
-      - name: Build and push backend image
+      - name: Build and push gitpier image
         run: |
           set -eu
-          VERSION_IMAGE="gitpier/backend:${VERSION}"
-          LATEST_IMAGE="gitpier/backend:latest"
+          VERSION_IMAGE="gitpier:${VERSION}"
+          LATEST_IMAGE="gitpier:latest"
           if [ "$VERSION" = "latest" ]; then
-            docker build -f backend/Dockerfile -t "$LATEST_IMAGE" backend
+            docker build -t "$LATEST_IMAGE" .
           else
-            docker build -f backend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" backend
-          fi
-          docker push "$VERSION_IMAGE"
-          if [ "$VERSION" != "latest" ]; then
-            docker push "$LATEST_IMAGE"
-          fi
-
-      - name: Build and push frontend image
-        run: |
-          set -eu
-          VERSION_IMAGE="gitpier/frontend:${VERSION}"
-          LATEST_IMAGE="gitpier/frontend:latest"
-          if [ "$VERSION" = "latest" ]; then
-            docker build -f frontend/Dockerfile -t "$LATEST_IMAGE" frontend
-          else
-            docker build -f frontend/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" frontend
-          fi
-          docker push "$VERSION_IMAGE"
-          if [ "$VERSION" != "latest" ]; then
-            docker push "$LATEST_IMAGE"
-          fi
-
-      - name: Build and push action-runner image
-        run: |
-          set -eu
-          VERSION_IMAGE="gitpier/action-runner:${VERSION}"
-          LATEST_IMAGE="gitpier/action-runner:latest"
-          if [ "$VERSION" = "latest" ]; then
-            docker build -f action-runner/Dockerfile -t "$LATEST_IMAGE" action-runner
-          else
-            docker build -f action-runner/Dockerfile -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" action-runner
+            docker build -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" .
           fi
           docker push "$VERSION_IMAGE"
           if [ "$VERSION" != "latest" ]; then

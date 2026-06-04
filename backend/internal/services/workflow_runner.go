@@ -402,6 +402,12 @@ func (r *WorkflowRunner) cloneRepo(repoPath, workspaceDir, commitSHA string) err
 func (r *WorkflowRunner) createContainer(ctx context.Context, workspaceDir, actionsCache string, envMap map[string]string) (string, error) {
 	runnerEnv := mergeStringMaps(envMap, map[string]string{})
 
+	// Docker validates bind sources at create time, so make sure the workspace
+	// directory exists even if clone/setup code was interrupted earlier.
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		return "", err
+	}
+
 	memory := int64(500 * 1024 * 1024) // 500 MB default
 	nanoCPUs := int64(500_000_000)     // 0.5 CPU
 
