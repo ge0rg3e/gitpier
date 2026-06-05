@@ -156,7 +156,7 @@ func Load() (*Config, error) {
 		SMTPPort:     getEnvInt("SMTP_PORT", 587),
 		SMTPUsername: getEnvOrEmpty("SMTP_USERNAME", ""),
 		SMTPPassword: getEnvOrEmpty("SMTP_PASSWORD", ""),
-		SMTPFrom:     getEnvOrEmpty("SMTP_FROM", "noreply@gitpier.com"),
+		SMTPFrom:     getEnvOrEmpty("SMTP_FROM", "no-reply@gitpier.com"),
 		SMTPFromName: getEnvOrEmpty("SMTP_FROM_NAME", "GitPier"),
 	}
 
