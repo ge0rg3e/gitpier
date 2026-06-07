@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { dashboard, users, type DashboardActivityRepo, type DashboardPullRequest, type Repository } from '$lib/api/client';
 	import { timeAgo } from '$lib/utils';
@@ -59,7 +60,9 @@
 			clearInterval(interval);
 			if (authStore.isAuthenticated) {
 				void loadOverview();
+				return;
 			}
+			goto('/login?redirect=/', { replaceState: true });
 		}, 80);
 	});
 
@@ -155,9 +158,7 @@
 	<title>Overview · GitPier</title>
 </svelte:head>
 
-{#if !authStore.isAuthenticated && !authStore.loading}
-	<div class="mx-auto max-w-3xl px-6 py-16 text-sm text-muted-foreground">Sign in to view your dashboard.</div>
-{:else if authStore.isAuthenticated}
+{#if authStore.isAuthenticated}
 	<div class="mx-auto max-w-4xl px-6 py-12">
 		{#if error}
 			<div class="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</div>
