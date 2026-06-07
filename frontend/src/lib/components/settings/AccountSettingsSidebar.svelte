@@ -60,6 +60,15 @@
 					SSH keys
 				</a>
 				<a
+					href="/settings/tokens"
+					class={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
+						isActive(['/settings/tokens']) ? 'font-semibold bg-brand text-white' : 'text-foreground hover:bg-secondary transition-colors'
+					}`}
+				>
+					<KeyRound class="h-3.5 w-3.5" />
+					Personal access tokens
+				</a>
+				<a
 					href="/settings/privacy"
 					class={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm ${
 						isActive(['/settings/privacy']) ? 'font-semibold bg-brand text-white' : 'text-foreground hover:bg-secondary transition-colors'

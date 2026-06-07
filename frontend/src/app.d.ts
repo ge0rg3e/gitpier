@@ -13,6 +13,7 @@ declare global {
 		electronWindowControls?: ElectronWindowControls;
 		__gitpier_config?: {
 			sshCloneHost?: string;
+			httpCloneBaseURL?: string;
 			turnstileSiteKey?: string;
 		};
 	}

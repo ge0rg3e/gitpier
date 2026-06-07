@@ -258,34 +258,22 @@ func (s *Server) handleExec(ch gossh.Channel, payload []byte, perms *gossh.Permi
 			// Update repository size after push
 			_ = s.repoSvc.UpdateRepoSize(context.Background(), capturedRepo, capturedRepoPath)
 
-			if s.workflowSvc == nil && s.webhookSvc == nil {
-				return
-			}
-			newRefs, _ := s.gitSvc.GetAllRefs(capturedRepoPath)
-			for ref, newSHA := range newRefs {
-				if !strings.HasPrefix(ref, "refs/heads/") {
-					continue
-				}
-				branch := strings.TrimPrefix(ref, "refs/heads/")
-				oldSHA := capturedOldRefs[ref]
-				if oldSHA != newSHA {
-					if s.workflowSvc != nil {
-						_ = s.workflowSvc.TriggerWorkflows(
-							context.Background(),
-							capturedRepo.ID, capturedOwner, capturedRepoName,
-							"push", branch, newSHA, "",
-						)
-					}
-					if s.webhookSvc != nil {
-						payload := services.BuildPushPayload(
-							s.gitSvc, capturedRepoPath, ref, oldSHA, newSHA,
-							capturedRepo, capturedOwner, capturedRepoName, capturedBaseURL,
-							capturedPusherName, "", capturedPusherID,
-						)
-						s.webhookSvc.Deliver(context.Background(), capturedRepo.ID, "push", payload)
-					}
-				}
-			}
+			services.HandleSuccessfulPush(
+				context.Background(),
+				s.gitSvc,
+				s.repoSvc,
+				s.workflowSvc,
+				s.webhookSvc,
+				capturedRepo,
+				capturedOwner,
+				capturedRepoName,
+				capturedRepoPath,
+				capturedBaseURL,
+				capturedPusherName,
+				"",
+				capturedPusherID,
+				capturedOldRefs,
+			)
 		}()
 	}
 

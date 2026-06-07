@@ -81,6 +81,7 @@
 	let hydratingFileMeta = $state(false);
 	let invalidFileMetaPaths = $state<Set<string>>(new Set());
 	let loadSeq = 0;
+	let setupProtocol = $state<'https' | 'ssh'>('https');
 
 	const { username, repo } = $derived(page.params);
 	const ref = $derived(page.url.searchParams.get('ref') ?? undefined);
@@ -93,6 +94,13 @@
 	const layoutRepo = $derived(layoutCtx?.repo);
 	const starCount = $derived(layoutCtx?.starCount ?? 0);
 	const commitCount = $derived(layoutCtx?.stats?.commits ?? 0);
+	function resolveHTTPCloneBaseURL(raw?: string): string {
+		const trimmed = (raw ?? '').trim();
+		if (trimmed) return trimmed.replace(/\/+$/, '');
+		if (typeof window !== 'undefined') return window.location.origin;
+		return 'http://localhost:8828';
+	}
+
 	function resolveSshCloneHost(raw?: string): string {
 		const trimmed = (raw ?? '').trim();
 		if (!trimmed) return 'localhost:2424';
@@ -101,13 +109,19 @@
 			.replace(/^[^@]+@/, '')
 			.replace(/\/+$/, '');
 	}
-	const sshCloneHost = resolveSshCloneHost(getPublicRuntimeConfig().sshCloneHost);
+
+	const runtimeConfig = getPublicRuntimeConfig();
+	const httpCloneBaseURL = resolveHTTPCloneBaseURL(runtimeConfig.httpCloneBaseURL);
+	const sshCloneHost = resolveSshCloneHost(runtimeConfig.sshCloneHost);
+	const httpsCloneUrl = $derived(`${httpCloneBaseURL}/${username}/${repo}.git`);
+	const sshCloneUrl = $derived(`ssh://git@${sshCloneHost}/${username}/${repo}.git`);
+	const setupCloneUrl = $derived(setupProtocol === 'ssh' ? sshCloneUrl : httpsCloneUrl);
 	const canAddFile = $derived(authStore.user != null && !/^[0-9a-f]{40}$/i.test(ref ?? '') && !layoutRepo?.is_archived);
 	const addFileHref = $derived(`/${username}/${repo}/new${ref ? `?ref=${ref}` : ''}`);
 	const setupNewRepoCmd = $derived(
-		`echo "# ${repo}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ssh://git@${sshCloneHost}/${username}/${repo}.git\ngit push -u origin main`
+		`echo "# ${repo}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${setupCloneUrl}\ngit push -u origin main`
 	);
-	const setupExistingRepoCmd = $derived(`git remote add origin ssh://git@${sshCloneHost}/${username}/${repo}.git\ngit branch -M main\ngit push -u origin main`);
+	const setupExistingRepoCmd = $derived(`git remote add origin ${setupCloneUrl}\ngit branch -M main\ngit push -u origin main`);
 
 	function formatReleaseDate(value?: string | null): string {
 		if (!value) return '';
@@ -537,9 +551,38 @@
 {:else if isEmpty}
 	<!-- Empty repo setup instructions -->
 	<div class="rounded-md border border-border bg-card p-8">
-		<h3 class="text-lg font-semibold text-foreground mb-1">Quick setup</h3>
-		<p class="text-sm text-muted-foreground mb-6">Get started by pushing an existing repository or creating a new one.</p>
+		<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+			<div>
+				<h3 class="text-lg font-semibold text-foreground mb-1">Quick setup</h3>
+				<p class="text-sm text-muted-foreground">Get started by pushing an existing repository or creating a new one.</p>
+			</div>
+			<div class="inline-flex w-fit rounded-md border border-border bg-background p-0.5">
+				<button
+					type="button"
+					onclick={() => (setupProtocol = 'https')}
+					class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${setupProtocol === 'https' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
+				>
+					HTTPS
+				</button>
+				<button
+					type="button"
+					onclick={() => (setupProtocol = 'ssh')}
+					class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${setupProtocol === 'ssh' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
+				>
+					SSH
+				</button>
+			</div>
+		</div>
 		<div class="space-y-5 text-sm">
+			<p class="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+				{#if setupProtocol === 'https'}
+					HTTPS uses a personal access token as the Git password.
+					<a href="/settings/tokens" class="text-primary hover:underline">Create token</a>
+				{:else}
+					SSH uses your account SSH key.
+					<a href="/settings/keys" class="text-primary hover:underline">Add SSH key</a>
+				{/if}
+			</p>
 			<div>
 				<p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">…create a new repository on the command line</p>
 				<CodeViewer code={setupNewRepoCmd} filePath="setup-new-repo.sh" />

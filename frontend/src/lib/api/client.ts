@@ -397,6 +397,17 @@ export interface Session {
 	is_current: boolean;
 }
 
+export interface PersonalAccessToken {
+	id: string;
+	name: string;
+	token_last: string;
+	scopes: string;
+	last_used_at?: string | null;
+	expires_at?: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
 // Users
 export const users = {
 	getProfile: (username: string, options?: { limit?: number; offset?: number }) =>
@@ -636,6 +647,17 @@ export const sshKeys = {
 	list: () => request<{ keys: SSHKey[] }>('/ssh-keys'),
 	add: (title: string, key: string) => request<SSHKey>('/ssh-keys', { method: 'POST', body: JSON.stringify({ title, key }) }),
 	delete: (id: number, confirmPassword: string) => request<void>(`/ssh-keys/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Password': confirmPassword } })
+};
+
+export const personalAccessTokens = {
+	list: () => request<{ tokens: PersonalAccessToken[] }>('/personal-access-tokens'),
+	create: (input: { name: string; scopes: string[]; expires_at?: string }, confirmPassword: string) =>
+		request<{ token: string; record: PersonalAccessToken }>('/personal-access-tokens', {
+			method: 'POST',
+			headers: { 'X-Confirm-Password': confirmPassword },
+			body: JSON.stringify(input)
+		}),
+	delete: (id: string, confirmPassword: string) => request<void>(`/personal-access-tokens/${id}`, { method: 'DELETE', headers: { 'X-Confirm-Password': confirmPassword } })
 };
 
 // Pull Requests

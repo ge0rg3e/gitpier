@@ -113,6 +113,7 @@ func main() {
 	oauthAppSvc := services.NewOAuthAppService(db)
 	oauthFlowSvc := services.NewOAuthFlowService(db)
 	gitlodeAppSvc := services.NewAppService(db)
+	personalAccessTokenSvc := services.NewPersonalAccessTokenService(db)
 
 	// Anti-spam service
 	antiSpamSvc, err := services.NewAntiSpamService(db, services.AntiSpamConfig{
@@ -149,9 +150,13 @@ func main() {
 	oauthAppHandler := handlers.NewOAuthAppHandler(oauthAppSvc, orgSvc)
 	oauthFlowHandler := handlers.NewOAuthFlowHandler(oauthFlowSvc, oauthAppSvc)
 	gitlodeAppHandler := handlers.NewAppHandler(gitlodeAppSvc, orgSvc)
+	personalAccessTokenHandler := handlers.NewPersonalAccessTokenHandler(personalAccessTokenSvc)
 	adminSystemHandler := handlers.NewAdminSystemHandler(db, repoSvc, cfg.AdminSystemPassword)
 	webhookSvc := services.NewWebhookService(db)
 	webhookHandler := handlers.NewWebhookHandler(webhookSvc, repoSvc)
+	gitHTTPHandler := handlers.NewGitHTTPHandler(cfg, repoSvc, gitSvc, personalAccessTokenSvc)
+	gitHTTPHandler.SetWorkflowService(workflowSvc)
+	gitHTTPHandler.SetWebhookService(webhookSvc)
 	// Package (Container Registry) service and handler
 	pkgSvc := services.NewPackageService(db, cfg.PackagesPath)
 	if err := pkgSvc.EnsureDirs(); err != nil {
@@ -244,7 +249,10 @@ func main() {
 	// Global middleware
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
-	e.Use(middleware.BodyLimit("220MB"))
+	e.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{
+		Limit:   "220MB",
+		Skipper: isGitHTTPPath,
+	}))
 	e.Use(jsonPayloadGuard(2<<20, 120)) // 2 MiB JSON bodies, max nesting depth 120
 
 	// Security headers
@@ -278,6 +286,9 @@ func main() {
 		Skipper: func(c echo.Context) bool {
 			path := c.Request().URL.Path
 			if strings.HasPrefix(path, "/v2/") {
+				return true
+			}
+			if isGitHTTPPath(c) {
 				return true
 			}
 			if strings.HasPrefix(path, "/_app/") {
@@ -572,6 +583,12 @@ func main() {
 	api.POST("/ssh-keys", sshKeyHandler.Add, apimiddleware.RequireAuth(authSvc))
 	api.DELETE("/ssh-keys/:id", sshKeyHandler.Delete, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
 
+	// Personal access tokens for Git over HTTPS. Account passwords are never
+	// accepted by Git HTTP; clients use these tokens as the Basic auth password.
+	api.GET("/personal-access-tokens", personalAccessTokenHandler.List, apimiddleware.RequireAuth(authSvc))
+	api.POST("/personal-access-tokens", personalAccessTokenHandler.Create, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
+	api.DELETE("/personal-access-tokens/:id", personalAccessTokenHandler.Delete, apimiddleware.RequireAuth(authSvc), apimiddleware.RequirePasswordVerification(authSvc))
+
 	// Organizations
 	api.POST("/orgs", orgHandler.Create, apimiddleware.RequireAuth(authSvc))
 	api.GET("/orgs/:orgname", orgHandler.Get)
@@ -715,6 +732,12 @@ func main() {
 	// This endpoint is outside /api/v1 to match the GitHub convention.
 	e.POST("/api/v1/app/installations/:installationID/access_tokens", gitlodeAppHandler.CreateInstallationToken)
 
+	// Smart Git HTTP transport. Routes intentionally live at repository clone
+	// URLs, e.g. /owner/repo.git, matching GitHub-style HTTPS remotes.
+	e.GET("/:owner/:repoWithGit/info/refs", gitHTTPHandler.InfoRefs)
+	e.POST("/:owner/:repoWithGit/git-upload-pack", gitHTTPHandler.UploadPack)
+	e.POST("/:owner/:repoWithGit/git-receive-pack", gitHTTPHandler.ReceivePack)
+
 	// Health check endpoint for Kubernetes liveness / readiness probes.
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
@@ -765,7 +788,8 @@ func registerFrontendRoutes(e *echo.Echo, cfg *config.Config) {
 
 	e.GET("/app-config.js", func(c echo.Context) error {
 		payload, err := json.Marshal(map[string]any{
-			"sshCloneHost": cfg.SSHCloneHost,
+			"sshCloneHost":     cfg.SSHCloneHost,
+			"httpCloneBaseURL": cfg.AppURL,
 			"turnstileSiteKey": func() string {
 				if cfg.EnableTurnstile {
 					return cfg.TurnstileSiteKey
@@ -803,6 +827,17 @@ func registerFrontendRoutes(e *echo.Echo, cfg *config.Config) {
 
 	e.GET("/*", spaHandler)
 	e.HEAD("/*", spaHandler)
+}
+
+func isGitHTTPPath(c echo.Context) bool {
+	if c == nil || c.Request() == nil || c.Request().URL == nil {
+		return false
+	}
+	path := c.Request().URL.Path
+	if strings.Contains(path, ".git/info/refs") {
+		return true
+	}
+	return strings.HasSuffix(path, ".git/git-upload-pack") || strings.HasSuffix(path, ".git/git-receive-pack")
 }
 
 // jsonPayloadGuard mitigates request-body DoS by bounding JSON size and nesting depth.

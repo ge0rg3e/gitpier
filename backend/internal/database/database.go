@@ -107,6 +107,7 @@ func Migrate(db *gorm.DB) error {
 		&models.Repository{},
 		&models.Collaborator{},
 		&models.SSHKey{},
+		&models.PersonalAccessToken{},
 		&models.Star{},
 		&models.PullRequest{},
 		&models.PRComment{},

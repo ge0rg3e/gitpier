@@ -99,10 +99,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                      getEnv("PORT", "8828"),
-		SSHPort:                   getEnv("SSH_PORT", "2424"),
-		AppURL:                    getEnv("APP_URL", "http://localhost:8828"),
-		APIURL:                    getEnv("API_URL", ""),
+		Port:                      getEnv("PORT", defaultDevHTTPPort()),
+		SSHPort:                   getEnv("SSH_PORT", defaultDevSSHPort()),
+		AppURL:                    getEnv("APP_URL", defaultDevAppURL()),
+		APIURL:                    getEnv("API_URL", defaultDevAPIURL()),
 		SSHCloneHost:              getEnvOrEmpty("SSH_CLONE_HOST", ""),
 		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		RedisURL:                  getEnvOrEmpty("REDIS_URL", "redis://redis:6379/0"),
@@ -110,20 +110,20 @@ func Load() (*Config, error) {
 		GitIdentityName:           getEnv("GIT_IDENTITY_NAME", "GitPier"),
 		GitIdentityEmail:          getEnv("GIT_IDENTITY_EMAIL", "noreply@gitpier.local"),
 		AdminSystemPassword:       getEnvOrEmpty("SYSTEM_ADMIN_PASSWORD", ""),
-		ReposPath:                 getEnv("REPOS_PATH", "/data/repos"),
-		SSHHostKeyPath:            getEnv("SSH_HOST_KEY_PATH", "/data/ssh/ssh_host_key"),
-		AvatarsPath:               getEnv("AVATARS_PATH", "/data/avatars"),
-		PackagesPath:              getEnv("PACKAGES_PATH", "/data/packages"),
-		MarkdownAssetsPath:        getEnv("MARKDOWN_ASSETS_PATH", "/data/markdown-assets"),
+		ReposPath:                 getEnv("REPOS_PATH", defaultDataPath("repos", "/data/repos")),
+		SSHHostKeyPath:            getEnv("SSH_HOST_KEY_PATH", defaultDataPath("ssh/ssh_host_key", "/data/ssh/ssh_host_key")),
+		AvatarsPath:               getEnv("AVATARS_PATH", defaultDataPath("avatars", "/data/avatars")),
+		PackagesPath:              getEnv("PACKAGES_PATH", defaultDataPath("packages", "/data/packages")),
+		MarkdownAssetsPath:        getEnv("MARKDOWN_ASSETS_PATH", defaultDataPath("markdown-assets", "/data/markdown-assets")),
 		FrontendDistPath:          getEnvOrEmpty("FRONTEND_DIST_PATH", ""),
-		SecretsFilePath:           getEnv("SECRETS_FILE_PATH", "/data/secrets.json"),
+		SecretsFilePath:           getEnv("SECRETS_FILE_PATH", defaultDataPath("secrets.json", "/data/secrets.json")),
 		RepoPublicSizeLimitBytes:  getEnvInt64("REPO_STORAGE_LIMIT_PUBLIC_MB", 5120) * 1024 * 1024,
 		RepoPrivateSizeLimitBytes: getEnvInt64("REPO_STORAGE_LIMIT_PRIVATE_MB", 5120) * 1024 * 1024,
 
 		DBMaxOpenConns:           getEnvInt("DB_MAX_OPEN_CONNS", 25),
 		DBMaxIdleConns:           getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeMinutes: getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 5),
-		CORSOrigins:              []string{getEnv("APP_URL", "http://localhost:8828")},
+		CORSOrigins:              []string{getEnv("APP_URL", defaultDevAppURL())},
 
 		DockerHost:                       getEnvOrEmpty("DOCKER_HOST", "tcp://dind:2375"),
 		WorkflowRunnerImage:              getEnv("WORKFLOW_RUNNER_IMAGE", "gitpier-action-runner:latest"),
@@ -133,7 +133,7 @@ func Load() (*Config, error) {
 		WorkflowContainerMemory:          getEnv("WORKFLOW_CONTAINER_MEMORY", "500m"),
 		WorkflowContainerCPUs:            getEnv("WORKFLOW_CONTAINER_CPUS", "0.5"),
 		WorkflowContainerNetworkMode:     normalizeWorkflowContainerNetworkMode(getEnvOrEmpty("WORKFLOW_CONTAINER_NETWORK_MODE", "bridge")),
-		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", "/data/workflow-workspaces"),
+		WorkflowWorkspacePath:            getEnv("WORKFLOW_WORKSPACE_PATH", defaultDataPath("workflow-workspaces", "/data/workflow-workspaces")),
 		WorkflowAllowDockerSocket:        getEnvOrEmpty("WORKFLOW_ALLOW_DOCKER_SOCKET", "true") == "true",
 		WorkflowContainerPidsLimit:       getEnvInt("WORKFLOW_CONTAINER_PIDS_LIMIT", 256),
 		WorkflowContainerReadOnlyRootfs:  getEnvOrEmpty("WORKFLOW_CONTAINER_READONLY_ROOTFS", "true") == "true",
@@ -305,6 +305,49 @@ func resolveExistingDir(candidates ...string) string {
 		if err == nil && info.IsDir() {
 			return candidate
 		}
+	}
+	return ""
+}
+
+func defaultDataPath(relativePath, fallback string) string {
+	dataRoot := resolveExistingDir("../.data", ".data")
+	if dataRoot == "" {
+		return fallback
+	}
+	if absRoot, err := filepath.Abs(dataRoot); err == nil {
+		dataRoot = absRoot
+	}
+	return filepath.Join(dataRoot, relativePath)
+}
+
+func hasLocalDevDataRoot() bool {
+	return resolveExistingDir("../.data", ".data") != ""
+}
+
+func defaultDevHTTPPort() string {
+	if hasLocalDevDataRoot() {
+		return "8080"
+	}
+	return "8828"
+}
+
+func defaultDevSSHPort() string {
+	if hasLocalDevDataRoot() {
+		return "2222"
+	}
+	return "2424"
+}
+
+func defaultDevAppURL() string {
+	if hasLocalDevDataRoot() {
+		return "http://localhost:5173"
+	}
+	return "http://localhost:8828"
+}
+
+func defaultDevAPIURL() string {
+	if hasLocalDevDataRoot() {
+		return "http://localhost:8080"
 	}
 	return ""
 }

@@ -22,6 +22,7 @@
 	let starring = $state(false);
 	let showClone = $state(false);
 	let copied = $state(false);
+	let cloneProtocol = $state<'https' | 'ssh'>('https');
 	let downloadingZip = $state(false);
 	let showBranchDropdown = $state(false);
 	let forking = $state(false);
@@ -175,11 +176,22 @@
 			.replace(/\/+$/, '');
 	}
 
-	const sshCloneHost = resolveSshCloneHost(getPublicRuntimeConfig().sshCloneHost);
+	function resolveHTTPCloneBaseURL(raw?: string): string {
+		const trimmed = (raw ?? '').trim();
+		if (trimmed) return trimmed.replace(/\/+$/, '');
+		if (typeof window !== 'undefined') return window.location.origin;
+		return 'http://localhost:8828';
+	}
+
+	const runtimeConfig = getPublicRuntimeConfig();
+	const sshCloneHost = resolveSshCloneHost(runtimeConfig.sshCloneHost);
+	const httpCloneBaseURL = resolveHTTPCloneBaseURL(runtimeConfig.httpCloneBaseURL);
 	const cloneUrlSSH = $derived(repo ? `ssh://git@${sshCloneHost}/${username}/${repo.name}.git` : '');
+	const cloneUrlHTTPS = $derived(repo ? `${httpCloneBaseURL}/${username}/${repo.name}.git` : '');
+	const cloneUrl = $derived(cloneProtocol === 'ssh' ? cloneUrlSSH : cloneUrlHTTPS);
 
 	async function copyCloneUrl() {
-		await navigator.clipboard.writeText(cloneUrlSSH);
+		await navigator.clipboard.writeText(cloneUrl);
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}
@@ -507,17 +519,38 @@
 								<div class="absolute right-0 top-full mt-1 w-[340px] rounded-md border border-border bg-card shadow-xl z-30 overflow-hidden">
 									<div class="p-4">
 										<p class="text-xs font-semibold text-foreground mb-3">Clone</p>
+										<div class="mb-2 inline-flex rounded-md border border-border bg-background p-0.5">
+											<button
+												type="button"
+												onclick={() => (cloneProtocol = 'https')}
+												class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${cloneProtocol === 'https' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
+											>
+												HTTPS
+											</button>
+											<button
+												type="button"
+												onclick={() => (cloneProtocol = 'ssh')}
+												class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${cloneProtocol === 'ssh' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
+											>
+												SSH
+											</button>
+										</div>
 										<div class="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
 											<code class="flex-1 text-xs font-mono text-muted-foreground truncate">
-												{cloneUrlSSH}
+												{cloneUrl}
 											</code>
 											<button onclick={copyCloneUrl} class="text-muted-foreground hover:text-foreground transition-colors shrink-0" aria-label="Copy">
 												{#if copied}<CheckCheck class="h-4 w-4 text-[#3fb950]" />{:else}<Copy class="h-4 w-4" />{/if}
 											</button>
 										</div>
 										<p class="mt-2 text-xs text-muted-foreground">
-											Use a password-protected SSH key.
-											<a href="/settings/keys" class="text-primary hover:underline">Add SSH key</a>
+											{#if cloneProtocol === 'https'}
+												Use a personal access token as your Git password.
+												<a href="/settings/tokens" class="text-primary hover:underline">Create token</a>
+											{:else}
+												Use a password-protected SSH key.
+												<a href="/settings/keys" class="text-primary hover:underline">Add SSH key</a>
+											{/if}
 										</p>
 									</div>
 									<div class="border-t border-secondary p-2">
