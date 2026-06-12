@@ -4,7 +4,6 @@
 	import { repos, releases, type FileEntry, type CommitInfo, type Release, type RepoStarEvent, type User } from '$lib/api/client';
 	import { authStore } from '$lib/stores/auth.svelte';
 	import { resolveRepoTreeIconUrl } from '$lib/icons/fileIcons';
-	import CodeViewer from '$lib/components/CodeViewer.svelte';
 	import { getPublicRuntimeConfig } from '$lib/runtime-config';
 	import { timeAgo, mediaUrl, isValidGitDate, commitAuthorAvatarUrl, commitAuthorHref, commitAuthorInitial, commitAuthorName } from '$lib/utils';
 	import { Folder, File, GitCommit, Clock, Star, Eye, GitFork, Settings2, Link, Activity, Tag, FilePlus, Scale } from '@lucide/svelte';
@@ -81,8 +80,7 @@
 	let hydratingFileMeta = $state(false);
 	let invalidFileMetaPaths = $state<Set<string>>(new Set());
 	let loadSeq = 0;
-	let setupProtocol = $state<'https' | 'ssh'>('https');
-
+	let setupProtocol = $state<'https' | 'ssh'>(layoutCtx?.cloneProtocol === 'ssh' ? 'ssh' : 'https');
 	const { username, repo } = $derived(page.params);
 	const ref = $derived(page.url.searchParams.get('ref') ?? undefined);
 	const requestedDocTab = $derived.by(() => {
@@ -122,6 +120,11 @@
 		`echo "# ${repo}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${setupCloneUrl}\ngit push -u origin main`
 	);
 	const setupExistingRepoCmd = $derived(`git remote add origin ${setupCloneUrl}\ngit branch -M main\ngit push -u origin main`);
+
+	function setSetupProtocol(protocol: 'https' | 'ssh') {
+		setupProtocol = protocol;
+		layoutCtx?.setCloneProtocol?.(protocol);
+	}
 
 	function formatReleaseDate(value?: string | null): string {
 		if (!value) return '';
@@ -559,14 +562,14 @@
 			<div class="inline-flex w-fit rounded-md border border-border bg-background p-0.5">
 				<button
 					type="button"
-					onclick={() => (setupProtocol = 'https')}
+					onclick={() => setSetupProtocol('https')}
 					class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${setupProtocol === 'https' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
 				>
 					HTTPS
 				</button>
 				<button
 					type="button"
-					onclick={() => (setupProtocol = 'ssh')}
+					onclick={() => setSetupProtocol('ssh')}
 					class={`rounded px-2.5 py-1 text-xs font-semibold transition-colors ${setupProtocol === 'ssh' ? 'bg-brand text-white' : 'text-muted-foreground hover:text-foreground'}`}
 				>
 					SSH
@@ -585,11 +588,11 @@
 			</p>
 			<div>
 				<p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">…create a new repository on the command line</p>
-				<CodeViewer code={setupNewRepoCmd} filePath="setup-new-repo.sh" />
+				<pre class="overflow-x-auto rounded-md border border-border bg-background p-4 text-sm text-foreground"><code class="font-mono whitespace-pre">{setupNewRepoCmd}</code></pre>
 			</div>
 			<div>
 				<p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">…or push an existing repository from the command line</p>
-				<CodeViewer code={setupExistingRepoCmd} filePath="setup-existing-repo.sh" />
+				<pre class="overflow-x-auto rounded-md border border-border bg-background p-4 text-sm text-foreground"><code class="font-mono whitespace-pre">{setupExistingRepoCmd}</code></pre>
 			</div>
 		</div>
 	</div>

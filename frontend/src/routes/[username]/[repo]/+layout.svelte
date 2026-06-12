@@ -50,6 +50,12 @@
 			return repo;
 		},
 		reloadMetadata: reloadRepoMetadata,
+		get cloneProtocol() {
+			return cloneProtocol;
+		},
+		setCloneProtocol(protocol: 'https' | 'ssh') {
+			cloneProtocol = protocol;
+		},
 		get starCount() {
 			return starCount;
 		},

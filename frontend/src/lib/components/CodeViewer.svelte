@@ -25,7 +25,7 @@
 		disableFileHeader: boolean;
 	}) => DiffsFileInstance;
 
-	const { code, filePath, containerClass = '' }: Props = $props();
+	let { code, filePath, containerClass = '' }: Props = $props();
 
 	let wrapper = $state<HTMLDivElement | null>(null);
 	let fileInstance: DiffsFileInstance | null = null;
@@ -63,6 +63,7 @@
 
 	$effect(() => {
 		if (!wrapper || !fileInstance) return;
+		wrapper.innerHTML = '';
 		fileInstance.render({
 			file: fileData,
 			containerWrapper: wrapper
