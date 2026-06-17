@@ -8,7 +8,7 @@ GitPier is currently in **alpha**.
 
 Some features may be incomplete, and you may encounter bugs or unexpected behavior. If you find an issue or would like to request a feature, please open an issue here:
 
-https://alpha.gitpier.com/gitpier/gitpier/issues
+https://github.com/ge0rg3e/gitpier/issues
 
 ## Requirements
 
@@ -68,4 +68,4 @@ To contribute:
 
 ## License
 
-See [LICENSE](https://alpha.gitpier.com/gitpier/gitpier/blob/LICENSE) for full details.
+See [LICENSE](https://github.com/ge0rg3e/gitpier/blob/main/apps/gitpier/LICENSE) for full details.
