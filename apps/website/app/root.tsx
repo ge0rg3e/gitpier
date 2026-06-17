@@ -9,8 +9,6 @@ import {
 import { RootProvider } from 'fumadocs-ui/provider/react-router';
 import type { Route } from './+types/root';
 import './app.css';
-import { isMarkdownPreferred, rewritePath } from 'fumadocs-core/negotiation';
-import { docsContentRoute, docsRoute } from '@/lib/shared';
 import { CookieBanner } from '@/components/cookie-banner';
 import { SiteHeader, SiteFooter } from '@/components/site-layout';
 import { MainContent } from '@/components/main-content';
@@ -96,32 +94,3 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   );
 }
 
-const { rewrite: rewriteDocs } = rewritePath(
-  `${docsRoute}{/*path}`,
-  `${docsContentRoute}{/*path}/content.md`,
-);
-const { rewrite: rewriteSuffix } = rewritePath(
-  `${docsRoute}{/*path}.md`,
-  `${docsContentRoute}{/*path}/content.md`,
-);
-const serverMiddleware: Route.MiddlewareFunction = async ({ request }, next) => {
-  const url = new URL(request.url);
-  if (
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/og/') ||
-    url.pathname.startsWith('/llms')
-  ) {
-    return next();
-  }
-
-  const suffixPath = rewriteSuffix(url.pathname);
-  if (suffixPath) return Response.redirect(new URL(suffixPath, url));
-
-  if (isMarkdownPreferred(request)) {
-    const docsPath = rewriteDocs(url.pathname);
-    if (docsPath) return Response.redirect(new URL(docsPath, url));
-  }
-
-  return next();
-};
-export const middleware = [serverMiddleware];
