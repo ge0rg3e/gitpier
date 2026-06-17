@@ -1,0 +1,103 @@
+---
+title: Troubleshooting
+description: Common issues and fixes for self-hosted GitPier.
+---
+
+## GitPier Container Does Not Start
+
+Symptoms:
+
+- `gitpier` exits or restarts repeatedly
+- `docker compose ps` shows the service as unhealthy or stopped
+
+Checks:
+
+- Verify both `{SECRET}` placeholders were replaced in `compose.yml`
+- Confirm `postgres` and `redis` are running
+- Check that `./data` exists and is writable by the configured `HOST_UID` and `HOST_GID`
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f gitpier postgres redis
+```
+
+## Workflow Jobs Fail to Start or Complete
+
+Symptoms:
+
+- Pipeline starts but jobs fail immediately
+- Container or build errors appear in `gitpier` logs
+
+Checks:
+
+- Confirm `dind` is running and healthy
+- Confirm `DOCKER_HOST=tcp://dind:2375` in the `gitpier` environment
+- Check whether the `trusted-builds` profile is required for your build flow
+- Verify the Docker runtime has enough free disk space
+
+Useful commands:
+
+```bash
+docker compose logs -f dind gitpier trusted-builder
+docker system df
+```
+
+## SSH Clone or Push Fails
+
+Symptoms:
+
+- `Permission denied` or connection timeout on SSH clone/push
+
+Checks:
+
+- Ensure host port `2424` is open and mapped correctly
+- Confirm `SSH_CLONE_HOST` matches the actual hostname or IP clients use
+- Validate SSH keys are configured for the user account
+
+Example endpoint format:
+
+```bash
+git clone ssh://git@<server-host>:2424/<owner>/<repo>.git
+```
+
+## Database or Redis Connectivity Errors
+
+Symptoms:
+
+- `gitpier` boot failures mentioning database or Redis connection errors
+
+Checks:
+
+- Verify `DATABASE_URL` points to `postgres`
+- Confirm `postgres` and `redis` containers are healthy
+- Check `redis` healthcheck status and retries
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f postgres redis gitpier
+```
+
+## Data and Storage Issues
+
+Symptoms:
+
+- Repositories/packages/workflows fail due to missing space or path errors
+
+Checks:
+
+- Validate `./data` bind mount exists and has correct permissions
+- Monitor disk usage for `./data` and Docker volumes
+- If secrets were intentionally reset, delete `./data/secrets.json` on the host and restart only with full awareness that regenerated secrets may affect access
+
+Useful commands:
+
+```bash
+df -h
+du -sh ./data/*
+```
+
+If you are still blocked, capture `docker compose ps`, the relevant `docker compose logs`, and the exact error output before opening an issue.

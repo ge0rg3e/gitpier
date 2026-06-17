@@ -1,0 +1,46 @@
+---
+title: Production Recommendations
+description: Hardening and operational best practices for self-hosted GitPier.
+---
+
+Use this checklist before running GitPier in production.
+
+## Networking and Exposure
+
+- Put an HTTP reverse proxy (Nginx, Traefik, or Caddy) in front of port `8828`
+- Terminate TLS for all browser traffic
+- Expose only the ports users need:
+  - `8828` for the web app, or your reverse-proxy entry point
+  - `2424` for Git over SSH
+- Keep `postgres`, `redis`, `dind`, and `trusted-builder` internal-only
+
+## Secrets and Access Control
+
+- Replace every `{SECRET}` placeholder before first boot
+- Generate secrets with a strong random source such as `openssl rand -base64 48`
+- Protect the generated `/data/secrets.json` file as sensitive application material
+- Rotate database credentials and application secrets after compromise or planned recovery work
+- Limit administrative access to trusted operators only
+
+## Data Durability and Backups
+
+- Back up `postgres_data`, `redis_data`, `dind_data`, and the bind-mounted `./data` directory
+- Test restore procedures regularly in a staging environment
+- Keep backup retention and encryption policies aligned with your compliance requirements
+
+## Build and Workflow Isolation
+
+- Keep `dind` and `trusted-builder` off public networks
+- Monitor Docker-in-Docker disk usage and image growth
+- Enable the `trusted-builds` profile only when required by your workflow design
+- Review the implications of running `dind` as a privileged service before production rollout
+
+## Operations and Upgrades
+
+- Pin image tags (`gitpier/gitpier`, `postgres`, `redis`, `docker:29-dind`, `docker:29-cli`) and upgrade intentionally
+- Roll out upgrades in staging before production
+- Monitor logs and disk usage for repositories, runtime data, and Docker volumes
+- Define alerting for container restarts, database failures, Redis failures, and low disk space
+- Keep `HOST_UID`, `HOST_GID`, and `SSH_CLONE_HOST` explicitly set when your environment requires predictable ownership or clone endpoints
+
+Next: see [Troubleshooting](/self-hosted/troubleshooting) for common failure patterns and fixes.

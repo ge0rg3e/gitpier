@@ -1,0 +1,82 @@
+---
+title: Architecture
+description: How GitPier self-hosted components interact in production.
+---
+
+GitPier self-hosted is deployed as a Docker Compose stack built around one application container and supporting infrastructure services.
+
+- `gitpier`: Web UI, API, repository operations, and SSH Git service
+- `postgres`: Primary relational database
+- `redis`: Cache and queue/state support
+- `dind`: Docker-in-Docker runtime for workflow job containers
+- `trusted-builder`: Optional Docker CLI helper service enabled through the `trusted-builds` profile
+
+## High-Level Request Flow
+
+1. Users access GitPier over HTTP on port `8828` and Git over SSH on port `2424`.
+2. The `gitpier` service serves the application UI and handles API requests directly.
+3. `gitpier` persists metadata in `postgres`.
+4. `gitpier` uses `redis` for cache and background state support.
+5. Build and workflow execution is delegated to `dind` through `DOCKER_HOST=tcp://dind:2375`.
+6. Persistent GitPier runtime data is stored under `/data`, bind-mounted from `./data`.
+
+## Service Responsibilities
+
+### GitPier
+
+- Serves the web application on port `8828`
+- Exposes the SSH Git endpoint on port `2424`
+- Handles auth, repositories, pull requests, issues, and workflow coordination
+- Connects to `postgres`, `redis`, and `dind`
+- Stores application data and generated secrets under `/data`
+
+### Postgres
+
+- Stores primary persistent metadata (users, repos, issues, PRs, etc.)
+- Must be backed up regularly
+
+### Redis
+
+- Supports fast ephemeral/stateful operations and background processing
+- Uses append-only persistence in this deployment
+
+### DIND (Workflow Runtime)
+
+- Hosts Docker daemon for workflow job containers
+- Receives build and workflow requests from `gitpier`
+- Should remain internal-only and never be publicly exposed
+
+### Trusted Builder
+
+- Optional profile for trusted build flows
+- Shares Docker runtime access through the `dind_run` volume
+- Should remain internal-only and enabled only when needed
+
+## Data and Persistence
+
+Persistent state is stored in Docker volumes plus the bind-mounted `./data` directory.
+
+Key persistence domains:
+
+- `postgres_data`: relational data
+- `redis_data`: Redis append-only data
+- `dind_data`: Docker runtime state for workflow/build containers
+- `./data` via `gitpier_data`: repositories, assets, runtime files, generated secrets, and SSH keys
+
+## Network Boundaries
+
+Recommended boundary model:
+
+- Public: GitPier web access on `8828` and SSH Git access on `2424`, or a reverse proxy and SSH ingress in front of them
+- Private/internal: `postgres`, `redis`, `dind`, and `trusted-builder`
+- Build network: internal-only Docker network used for workflow/build isolation
+
+## Security Posture Notes
+
+- Keep internal services off the public internet
+- Use strong secret values for database credentials and generated runtime secrets
+- Set `SSH_CLONE_HOST` to the real hostname or IP clients will use
+- Keep workflow and build services on internal networks only
+- Pin image tags and upgrade in controlled steps
+
+For deployment steps, continue with [Get Started](/self-hosted/get-started).

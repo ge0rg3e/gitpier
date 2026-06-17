@@ -1,0 +1,42 @@
+---
+title: Introduction
+description: GitPier overview for self-hosted deployments.
+---
+
+GitPier is a modern Git collaboration platform for teams that need repository hosting, code review, issues, and CI/CD on infrastructure they control.
+
+The self-hosted deployment documented here uses Docker Compose with these core services:
+
+- `gitpier` for the web UI, API, and SSH Git access
+- `postgres` for relational data
+- `redis` for cache and queue/state support
+- `dind` for Docker-based build and workflow execution
+- `trusted-builder` as an optional profile for trusted builds
+
+## What GitPier Includes
+
+- Repository hosting with branches, tags, file browsing, and commit history
+- Pull requests with review workflows, inline comments, and merge controls
+- Issue tracking with labels, milestones, and assignees
+- Built-in CI/CD workflows triggered by pushes and pull requests
+- SSH-based Git access
+- Organizations and role-based access controls
+- Persistent local storage for repositories, assets, and runtime data
+
+## Why Self-Host GitPier
+
+- Keep source code and metadata inside your own infrastructure
+- Control networking, data retention, backups, and upgrades
+- Integrate with internal security and compliance requirements
+- Run CI/CD jobs in an environment you manage end-to-end
+
+## Deployment Model
+
+The documented default deployment exposes:
+
+- `8828` for the GitPier web application
+- `2424` for Git over SSH
+
+All other services remain internal to the Docker Compose project.
+
+Use [Get Started](/self-hosted/get-started) for the full deployment tutorial, then continue with [Production Recommendations](/self-hosted/production-recommendations) and [Troubleshooting](/self-hosted/troubleshooting).

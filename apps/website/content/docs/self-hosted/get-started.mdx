@@ -1,0 +1,204 @@
+---
+title: Get Started
+description: Full tutorial to self-host GitPier with Docker Compose.
+---
+
+This guide deploys GitPier in self-hosted mode using Docker Compose.
+
+## Prerequisites
+
+- Linux server or VM with Docker Engine and Docker Compose
+- At least 2 vCPU / 4 GB RAM / 50 GB Storage
+- Open ports:
+  - `8828` for GitPier web access
+  - `2424` for SSH Git access
+  - You can change these host ports in `compose.yml` based on your environment
+- A hostname or IP address for web and SSH access
+- Ability to generate and store strong secrets
+
+## Directory Layout
+
+Create a working directory:
+
+```bash
+mkdir -p gitpier && cd gitpier
+mkdir -p data
+```
+
+## 1. Create `compose.yml`
+
+Create `compose.yml` with the following content:
+
+Check [Docker Hub](https://hub.docker.com/u/gitpier) for the latest version.
+
+```yaml
+name: gitpier
+
+services:
+  dind:
+    image: docker:29-dind
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command:
+      - --host=unix:///var/run/docker.sock
+      - --host=tcp://0.0.0.0:2375
+    volumes:
+      - dind_data:/var/lib/docker
+      - dind_run:/var/run
+      - gitpier_data:/data
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - build
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitpier
+      POSTGRES_PASSWORD: {SECRET}
+      POSTGRES_DB: gitpier
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app
+
+  gitpier:
+    image: gitpier/gitpier:0.0.1
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://gitpier:{SECRET}@postgres:5432/gitpier
+      SSH_CLONE_HOST: localhost
+      DOCKER_HOST: tcp://dind:2375
+    ports:
+      - "8828:8828"
+      - "2424:2424"
+    volumes:
+      - gitpier_data:/data
+    networks:
+      - app
+      - build
+
+  trusted-builder:
+    image: docker:29-cli
+    profiles: ["trusted-builds"]
+    restart: unless-stopped
+    depends_on:
+      dind:
+        condition: service_healthy
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - dind_run:/var/run
+      - gitpier_data:/data
+    networks:
+      - build
+
+volumes:
+  gitpier_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  postgres_data:
+  redis_data:
+  dind_data:
+  dind_run:
+
+networks:
+  app:
+  build:
+    internal: true
+```
+
+## 2. Set Required Secrets and URLs
+
+Before starting containers, replace placeholders:
+
+- `{SECRET}` with a strong password or secret value
+
+Also update these values to match your environment:
+
+- `SSH_CLONE_HOST`
+- `HOST_UID`
+- `HOST_GID`
+
+Recommended secret generation:
+
+```bash
+openssl rand -base64 48
+```
+
+Set `SSH_CLONE_HOST` to the hostname or IP your users will use for Git over SSH.
+
+Set `HOST_UID` and `HOST_GID` if you need the container to write files as a specific host user and group.
+
+If you need to reset secrets, delete `/data/secrets.json` and restart the server. The file will be regenerated automatically.
+
+## 3. Start GitPier
+
+```bash
+docker compose up -d
+```
+
+Check status:
+
+```bash
+docker compose ps
+```
+
+Follow logs when needed:
+
+```bash
+docker compose logs -f gitpier postgres redis dind
+```
+
+## 4. Validate Access
+
+- Open GitPier: `http://<server-ip>:8828`
+- SSH endpoint available on host port `2424`
+
+Example clone format (after setup):
+
+```bash
+git clone ssh://git@<server-host>:2424/<owner>/<repo>.git
+```
+
+## 5. Persistence and Backups
+
+Persistent data is stored in Docker volumes, including bind-mounted `./data` through `gitpier_data`.
+
+Minimum backup targets:
+
+- PostgreSQL data (`postgres_data`)
+- Redis append-only data (`redis_data`)
+- GitPier data (`./data` bind mount)
+
+Next steps:
+
+- [Production Recommendations](/self-hosted/production-recommendations)
+- [Troubleshooting](/self-hosted/troubleshooting)

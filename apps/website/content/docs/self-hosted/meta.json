@@ -1,0 +1,14 @@
+{
+  "title": "Self-Hosted",
+  "description": "Deploy and operate GitPier on your own infrastructure",
+  "icon": "Server",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "introduction",
+    "get-started",
+    "architecture",
+    "production-recommendations",
+    "troubleshooting"
+  ]
+}

@@ -1,0 +1,13 @@
+name: gitpier-docs
+
+services:
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "7638"
+    ports:
+      - "7638:7638"
