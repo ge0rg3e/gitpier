@@ -1,0 +1,66 @@
+name: Release Docker Images
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  docker-release:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Validate release version and Docker Hub credentials
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME:-}"
+          if [ -z "$VERSION" ]; then
+            VERSION="latest"
+          else
+            VERSION="${VERSION#v}"
+            VERSION="${VERSION#V}"
+            if [ -z "$VERSION" ]; then
+              VERSION="latest"
+            fi
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [ -z "${DOCKERHUB_USERNAME:-}" ] || [ -z "${DOCKERHUB_TOKEN:-}" ]; then
+            echo "Missing DOCKERHUB_USERNAME or DOCKERHUB_TOKEN repository secret."
+            exit 1
+          fi
+
+      - name: Login to Docker Hub
+        run: |
+          set -eu
+          unset DOCKER_AUTH_CONFIG
+          rm -rf "${HOME}/.docker"
+          mkdir -p "${HOME}/.docker"
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Debug Docker environment on failure
+        if: failure()
+        run: |
+          set -eu
+          echo "HOME=${HOME:-}"
+          echo "DOCKER_HOST=${DOCKER_HOST:-}"
+          env | grep '^DOCKER' || true
+          ls -la "${HOME}" || true
+          ls -la "${HOME}/.docker" || true
+
+      - name: Build and push gitpier image
+        run: |
+          set -eu
+          VERSION_IMAGE="gitpier:${VERSION}"
+          LATEST_IMAGE="gitpier:latest"
+          if [ "$VERSION" = "latest" ]; then
+            docker build -t "$LATEST_IMAGE" .
+          else
+            docker build -t "$VERSION_IMAGE" -t "$LATEST_IMAGE" .
+          fi
+          docker push "$VERSION_IMAGE"
+          if [ "$VERSION" != "latest" ]; then
+            docker push "$LATEST_IMAGE"
+          fi
