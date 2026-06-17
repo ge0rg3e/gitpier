@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "gitpier-docs",
+  "name": "gitpier",
   "main": "./workers/app.ts",
   "compatibility_date": "2024-09-23",
   "compatibility_flags": ["nodejs_compat_v2"],
