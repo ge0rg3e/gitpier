@@ -13,6 +13,8 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Validate release version and Docker Hub credentials
         run: |
           set -eu
@@ -51,6 +53,7 @@ jobs:
           ls -la "${HOME}/.docker" || true
 
       - name: Build and push gitpier image
+        working-directory: apps/gitpier
         run: |
           set -eu
           VERSION_IMAGE="gitpier:${VERSION}"
