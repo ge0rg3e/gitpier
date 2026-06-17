@@ -28,7 +28,7 @@
 		<FlaskConical class="h-4 w-4 shrink-0" />
 		<span>
 			<strong>Alpha release</strong> - GitPier is under active development. You may encounter bugs or missing features.
-			<a href="https://alpha.gitpier.com/gitpier/gitpier/issues" target="_blank" rel="noreferrer" class="font-semibold underline underline-offset-2 hover:opacity-80">Send feedback!</a>
+			<a href="https://github.com/ge0rg3e/gitpier/issues" target="_blank" rel="noreferrer" class="font-semibold underline underline-offset-2 hover:opacity-80">Send feedback!</a>
 		</span>
 		<button
 			onclick={dismiss}
